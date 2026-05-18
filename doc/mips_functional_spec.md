@@ -20,7 +20,6 @@
    - `doc/mips_control_signals_single_cycle.md`
    - `doc/mips_control_signals_pipelined.md`
 4. 구현 가이드: `guide/README.md`
-5. 과거 handoff: `doc/agent_handoff/2026-05-11.md`
 
 이 명세서는 프로젝트의 RV32I 대응 학습 목표에 맞춰 확정된 MIPS subset만 다룹니다. 새 ISA 지원을 추가하지 않습니다.
 
