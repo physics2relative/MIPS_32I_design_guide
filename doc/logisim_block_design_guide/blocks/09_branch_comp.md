@@ -2,14 +2,14 @@
 
 ## 역할
 
-Branch Comp는 register 값 두 개를 비교해 branch가 taken인지 판단합니다. 현재 실제 구현 branch는 `beq`, `bne`뿐입니다.
+Branch Comp는 register 값 두 개를 비교해 branch가 taken인지 판단합니다. 현재 실제 구현 branch는 `beq`, `bne`뿐입니다. 이 block은 ALU zero flag를 받지 않고, register/forwarding operand를 직접 비교합니다.
 
 ## 입력
 
 | 입력 | 폭 | 출처 | 설명 |
 |---|---:|---|---|
-| `Data_rs` | 32 | Register | 비교 operand 1 |
-| `Data_rt` | 32 | Register | 비교 operand 2 |
+| `Data_rs` | 32 | Register / Forwarding mux | 비교 operand 1 |
+| `Data_rt` | 32 | Register / Forwarding mux | 비교 operand 2 |
 | `BrSel` | 3 | Control Unit | branch 비교 방식 |
 | `Branch` | 1 | Control Unit | branch instruction 여부 |
 
@@ -33,9 +33,11 @@ Branch Comp는 register 값 두 개를 비교해 branch가 taken인지 판단합
 - `bne`에서 두 register가 다르면 taken입니다.
 - branch가 아닌 instruction에서 comparator 결과와 무관하게 PC branch가 선택되지 않습니다.
 - `blt/bge/bltu/bgeu` control row가 없어야 합니다.
+- ALU `Zero`/`ALUResult` 입력 없이 `Data_rs`, `Data_rt`, `BrSel`만으로 taken 여부가 결정됩니다.
 
 ## 흔한 실수
 
+- ALU zero flag를 Branch Comp 입력처럼 배선해 ALU와 branch condition을 다시 결합하는 실수.
 - Branch Comp에서 직접 `PCSel`을 만들어 Jump 우선순위를 깨뜨리는 실수.
 - 예약된 `BR_LT/BR_GE/BR_LTU/BR_GEU`를 실제 branch로 구현하는 실수.
 - branch target 계산을 Branch Comp 안에 섞는 실수. target은 ALU 경로가 만듭니다.

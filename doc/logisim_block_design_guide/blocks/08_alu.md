@@ -2,7 +2,7 @@
 
 ## 역할
 
-ALU는 산술, 논리, 비교, shift, 주소 계산, branch target 계산을 수행합니다. 결과는 write-back, data memory address, PC branch target으로 사용됩니다.
+ALU는 산술, 논리, `slt/sltu` 비교, shift, 주소 계산, branch target 계산을 수행합니다. 결과는 write-back, data memory address, PC branch target으로 사용됩니다. Branch taken 판정은 ALU flag가 아니라 별도 Branch Comp가 수행합니다.
 
 ## 입력
 
@@ -17,7 +17,7 @@ ALU는 산술, 논리, 비교, shift, 주소 계산, branch target 계산을 수
 | 출력 | 폭 | 목적지 | 설명 |
 |---|---:|---|---|
 | `ALUResult` | 32 | Data Memory, WB selector, PC Selector | 연산 결과 |
-| optional flags | 1 each | debug/Branch Comp 선택 | zero/negative/carry 등은 필수 아님 |
+| optional flags | 1 each | debug only | zero/negative/carry 등은 필수 아님. branch 판정에는 사용하지 않음 |
 
 ## Logisim 설계 가이드
 
@@ -45,12 +45,14 @@ ALU는 산술, 논리, 비교, shift, 주소 계산, branch target 계산을 수
 - `slt/slti`는 signed 비교, `sltu/sltiu`는 unsigned 비교입니다.
 - shift는 `B[4:0]`만 사용합니다.
 - branch target 계산 결과가 `PC+4+offset`입니다.
+- branch taken 판정은 ALU zero flag가 아니라 Branch Comp의 equality comparator 결과를 사용합니다.
 
 ## 흔한 실수
 
 - signed/unsigned 비교를 같은 comparator로 처리하는 실수.
 - `sra`를 logical shift로 구현하는 실수.
 - overflow exception을 만들려고 시도하는 실수. 이 프로젝트 명세에는 exception 처리가 없습니다.
+- `beq/bne`를 위해 ALU zero flag를 필수 출력으로 만들고 PCControl에 직접 연결하는 실수. branch 판정은 Branch Comp에서 분리합니다.
 - `ALU_NONE`일 때 floating output을 두는 실수. 0으로 안정화합니다.
 
 ## Caveat / 주의사항

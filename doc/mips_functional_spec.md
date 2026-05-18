@@ -276,8 +276,10 @@ offset = (label_address - (PC + 4)) >> 2
 
 구현 팁:
 
-- `beq`는 ALU subtraction의 zero flag를 사용할 수 있습니다.
-- `bne`는 zero flag를 invert하면 됩니다.
+- 이 설계의 branch taken 판정은 ALU zero flag를 사용하지 않고 별도 `BranchComp`가 수행합니다.
+- `beq`는 `BranchComp` 내부 equality comparator의 `EQ = (Data_rs == Data_rt)` 결과를 사용합니다.
+- `bne`는 같은 `EQ` 결과를 invert한 `!EQ`를 사용합니다.
+- ALU는 branch 조건 비교가 아니라 branch target `PC+4 + (sign_ext(offset) << 2)` 계산만 담당합니다.
 - RV32I의 `blt/bge/bltu/bgeu`는 MIPS real instruction으로 직접 넣지 않고 다음 의사 명령어 시퀀스로 처리합니다.
 
 ```asm
@@ -548,14 +550,14 @@ SelectedJumpTarget = (JumpSel == 0) ? JumpTarget : Data_rs
 | 값 | 이름 | 의미 |
 | --- | --- | --- |
 | 00 | PC_PLUS4 | PC + 4 |
-| 01 | PC_BRANCH | branch target입니다. 이 설계에서는 분기 명령어일 때 ALUResult = PC+4 + (sign_ext(imm16) << 2)입니다. |
+| 01 | PC_BRANCH | branch target입니다. 이 설계에서는 분기 명령어일 때 ALUResult = PC+4 + (sign_ext(imm16) << 2)이며, taken 여부는 별도 `BranchComp`가 결정합니다. |
 | 10 | PC_JUMP | JumpSelector가 고른 SelectedJumpTarget입니다. j/jal/jr/jalr 모두 이 입력을 사용합니다. |
 | `11` | 예약 | 예약입니다. |
 
 `PCControl`은 다음처럼 `PCSel`을 만듭니다.
 
 ```text
-BranchTaken = Branch && BranchComp(Data_rs, Data_rt, BrSel)
+BranchTaken = Branch && BranchComp(Data_rs, Data_rt, BrSel)  // ALU flag가 아니라 별도 comparator 결과
 
 if Jump:
     PCSel = PC_JUMP
@@ -640,13 +642,13 @@ Branch=0, Jump=0, JumpSel=0, PCSel=PC_PLUS4(00)
 | beq | 0 | DEST_NONE(11) | A_PC4(01) | B_BR_OFFSET(010) | IMM_BRANCH16(011) | BR_EQ(001) | ALU_ADD(0000) | WB_NONE(11) | MEM_NONE(11) | MEM_IDLE(100) | X | 1 | 0 | X | BrTaken ? PC_BRANCH(01) : PC_PLUS4(00) |
 | bne | 0 | DEST_NONE(11) | A_PC4(01) | B_BR_OFFSET(010) | IMM_BRANCH16(011) | BR_NE(010) | ALU_ADD(0000) | WB_NONE(11) | MEM_NONE(11) | MEM_IDLE(100) | X | 1 | 0 | X | BrTaken ? PC_BRANCH(01) : PC_PLUS4(00) |
 
-Branch 명령어에서 ALU는 branch target을 계산합니다.
+Branch 명령어에서 ALU는 branch target만 계산합니다.
 
 ```text
 ALUResult = PC+4 + (sign_ext(imm16) << 2)
 ```
 
-Branch compare는 별도 `BranchComp`가 수행합니다.
+Branch compare는 ALU result/zero flag와 분리된 별도 `BranchComp`가 수행합니다. 따라서 `beq/bne` 때문에 ALU flag output을 필수로 만들 필요가 없습니다.
 
 ##### 6.7 Jump / Link
 
@@ -953,7 +955,7 @@ RsUsed=0, RtUsed=0
 | beq | 0 | DEST_NONE | A_PC4 | B_BR_OFFSET | IMM_BRANCH16 | BR_EQ | ALU_ADD | WB_NONE | MEM_NONE | MEM_IDLE | X | JUMP_NONE | 1 | 0 | 1 | 1 |
 | bne | 0 | DEST_NONE | A_PC4 | B_BR_OFFSET | IMM_BRANCH16 | BR_NE | ALU_ADD | WB_NONE | MEM_NONE | MEM_IDLE | X | JUMP_NONE | 1 | 0 | 1 | 1 |
 
-Branch target은 EX 단계에서 `PC+4 + (sign_ext(imm16) << 2)`로 계산합니다. Branch compare는 ALU result 대신 별도 `BranchComp`가 `FwdRsData`, `FwdRtData`, `BrSel`을 보고 판단하는 구조가 좋습니다.
+Branch target은 EX 단계에서 `PC+4 + (sign_ext(imm16) << 2)`로 계산합니다. Branch compare는 ALU result/zero flag 대신 별도 `BranchComp`가 `FwdRsData`, `FwdRtData`, `BrSel`을 보고 판단합니다. 이 분리 때문에 branch용 ALU flag forwarding을 추가하지 않아도 되고, branch operand forwarding은 `BranchComp` 입력으로 직접 들어갑니다.
 
 ##### 7.7 Jump / Link
 
@@ -971,7 +973,7 @@ Branch target은 EX 단계에서 `PC+4 + (sign_ext(imm16) << 2)`로 계산합니
 ID 단계 제어 유닛은 `PCSel`을 직접 만들지 않습니다. EX 단계에서 다음처럼 결정합니다.
 
 ```text
-BranchTaken = Branch && BranchComp(FwdRsData, FwdRtData, BrSel)
+BranchTaken = Branch && BranchComp(FwdRsData, FwdRtData, BrSel)  // ALU flag가 아니라 별도 comparator 결과
 
 if JumpSel == JUMP_REG:
     PCSel = PC_REG_TARGET
