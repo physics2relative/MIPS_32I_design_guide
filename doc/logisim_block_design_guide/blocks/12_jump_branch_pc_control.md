@@ -10,7 +10,7 @@ Jump Branch / PCControl block은 branch/jump 결과를 모아 최종 `PCSel`을 
 |---|---:|---|---|
 | `Branch` | 1 | Control Unit | branch instruction 여부 |
 | `Jump` | 1 | Control Unit | jump instruction 여부 |
-| `BranchTakenRaw` | 1 | Branch Comp | branch compare 결과 |
+| `BranchCond` | 1 | Branch Comp | branch compare 결과 |
 | `BranchTarget` | 32 | ALU | branch target 주소 |
 | `SelectedJumpTarget` | 32 | Jump Sel | jump target 주소 |
 | `PCPlus4` | 32 | PC+4 | fall-through 주소 |
@@ -20,11 +20,11 @@ Jump Branch / PCControl block은 branch/jump 결과를 모아 최종 `PCSel`을 
 | 출력 | 폭 | 목적지 | 설명 |
 |---|---:|---|---|
 | `PCSel` | 2 | PC Selector | `00=PC+4`, `01=branch`, `10=jump` |
-| optional `BranchTaken` | 1 | debug | `Branch && BranchTakenRaw` |
+| `BranchTaken` | 1 | debug | `Branch && BranchCond` |
 
 ## Logisim 설계 가이드
 
-1. `BranchTaken = Branch && BranchTakenRaw`를 만듭니다.
+1. `BranchTaken = Branch && BranchCond`를 만듭니다. `BranchCond`는 Branch Comp의 1-bit EQ/NE 조건 결과입니다.
 2. `Jump=1`이면 `PCSel=PC_JUMP(10)`입니다.
 3. 그렇지 않고 `BranchTaken=1`이면 `PCSel=PC_BRANCH(01)`입니다.
 4. 나머지는 `PCSel=PC_PLUS4(00)`입니다.
@@ -35,7 +35,7 @@ Jump Branch / PCControl block은 branch/jump 결과를 모아 최종 `PCSel`을 
 ```text
 if Jump:
     PCSel = PC_JUMP
-else if Branch && BranchTakenRaw:
+else if Branch && BranchCond:
     PCSel = PC_BRANCH
 else:
     PCSel = PC_PLUS4
