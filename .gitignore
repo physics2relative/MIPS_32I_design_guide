@@ -1,3 +1,13 @@
 __pycache__/
 *.py[cod]
 tools/testvector_generators/test_vectors/
+
+# Cadence/Xcelium and waveform simulation artifacts
+xcelium.d/
+wave.shm/
+.simvision/
+*.log
+*.history
+xrun.key
+xrun.log
+xrun.history

@@ -19,7 +19,7 @@ Control Unit은 `opcode`와 R-type `funct`를 해석해 datapath selector, memor
 | `DestSel` | 2 | Dest Sel | write register 선택 |
 | `ASel` | 2 | A Selector | ALU A 선택 |
 | `BSel` | 3 | B Selector | ALU B 선택 |
-| `ImmSel` | 3 | Imm Generator | immediate 생성 방식 |
+| `ImmSel` | 2 | Imm Generator | 16-bit immediate 생성 방식 |
 | `BrSel` | 1 | Branch Comp | `0=EQ`, `1=NE` 비교 방식 |
 | `ALUSel` | 4 | ALU | ALU operation |
 | `WBSel` | 2 | WB selector | write-back source |
@@ -32,11 +32,11 @@ Control Unit은 `opcode`와 R-type `funct`를 해석해 datapath selector, memor
 
 ## Logisim 설계 가이드
 
-1. 먼저 NOP-safe 기본값을 만듭니다: `RegWEn=0`, `DestSel=DEST_NONE`, `WBSel=WB_NONE`, `ASel=A_ZERO`, `BSel=B_ZERO`, `ImmSel=IMM_NONE`, `BrSel=BR_EQ`, `ALUSel=ALU_NONE`, `WdLen=MEM_NONE`, `MemRW=MEM_IDLE`, `LoadEx=0`, `Branch=0`, `Jump=0`, `JumpSel=0`.
+1. 먼저 NOP-safe 기본값을 만듭니다: `RegWEn=0`, `DestSel=DEST_NONE`, `WBSel=WB_NONE`, `ASel=A_ZERO`, `BSel=B_ZERO`, `ImmSel=IMM_SIGN16`, `BrSel=BR_EQ`, `ALUSel=ALU_NONE`, `WdLen=MEM_NONE`, `MemRW=MEM_IDLE`, `LoadEx=0`, `Branch=0`, `Jump=0`, `JumpSel=0`.
 2. opcode별 main decoder를 만들고, `opcode=000000`일 때만 funct decoder를 추가로 사용합니다.
 3. R-type ALU는 `DestSel=rd`, `WBSel=ALU`, `RegWEn=1`을 공통으로 두고 funct별 `ALUSel`만 바꿉니다.
 4. load/store는 ALU를 address adder로 사용하고, memory control은 `WdLen/MemRW/LoadEx`로 분리합니다.
-5. branch는 `ALUSel=ADD`, `ASel=PC+4`, `BSel=branch offset`으로 target을 만들고, compare는 Branch Comp가 수행합니다.
+5. branch는 `ALUSel=ADD`, `ASel=PC+4`, `BSel=B_IMM`, `ImmSel=IMM_BRANCH16`으로 target을 만들고, compare는 Branch Comp가 수행합니다.
 6. jump는 `Jump=1`, `PCSel`은 Jump Branch/PCControl에서 최종 결정합니다.
 
 
@@ -57,8 +57,8 @@ Control Unit 구현자는 전체 instruction별 row를 `doc/mips_functional_spec
 | Signal | Encoding | 의미 |
 |---|---|---|
 | `ASel` | `00=A_RS`, `01=A_PC4`, `10=A_ZERO`, `11=A_RT` | ALU A 입력 |
-| `BSel` | `000=B_RT`, `001=B_IMM`, `010=B_BR_OFFSET`, `011=B_SHAMT`, `100=B_RS_LOW5`, `101=B_ZERO`, `110=예약`, `111=B_NONE` | ALU B 입력 |
-| `ImmSel` | `000=IMM_SIGN16`, `001=IMM_ZERO16`, `010=IMM_LUI16`, `011=IMM_BRANCH16`, `100=IMM_J26`, `111=IMM_NONE` | immediate/decode anchor. 이 guide에서 `IMM_J26`는 J-type decode 표시이며, 32-bit jump target 실제 생성 owner는 Jump Target Gen입니다. |
+| `BSel` | `000=B_RT`, `001=B_IMM`, `010=B_SHAMT`, `011=B_RS_LOW5`, `100=B_ZERO`, `101/110=예약`, `111=B_NONE` | ALU B 입력 |
+| `ImmSel` | `00=IMM_SIGN16`, `01=IMM_ZERO16`, `10=IMM_LUI16`, `11=IMM_BRANCH16` | 16-bit immediate 생성 방식입니다. J-type target26은 Jump Target Gen으로 직접 보냅니다. |
 
 ### Branch / ALU / memory / jump
 
@@ -84,7 +84,7 @@ Control Unit 구현자는 전체 instruction별 row를 `doc/mips_functional_spec
 | Branch | `##### 6.6 Branch` | `Branch=1`, `BrSel=EQ/NE`, `PCSel`은 PCControl이 생성 |
 | Jump / Link | `##### 6.7 Jump / Link` | `Jump=1`, `jal`은 `$31`, `jalr`은 `rd`, link data는 `PC+4` |
 
-`IMM_J26`를 쓰더라도 Imm Generator 내부에 32-bit jump target 생성기를 중복 배치하지 않습니다. raw `target26`을 Jump Target Gen으로 보내고, Jump Target Gen이 `{PC+4[31:28], target26, 2'b00}`을 만듭니다.
+Imm Generator 내부에 32-bit jump target 생성기를 중복 배치하지 않습니다. raw `target26`을 Jump Target Gen으로 보내고, Jump Target Gen이 `{PC+4[31:28], target26, 2'b00}`을 만듭니다.
 
 ## 검증 포인트
 

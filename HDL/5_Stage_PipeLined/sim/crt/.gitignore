@@ -1,0 +1,8 @@
+xcelium.d/
+wave.shm/
+*.log
+*.history
+*.key
+*.dsn
+*.trn
+.simvision/

@@ -29,12 +29,12 @@ class GeneratedMem:
 SCHEMAS: Dict[str, Sequence[Field]] = {
     "alu": (("ALUSel_bin", 4), ("A", 32), ("B", 32), ("Expected", 32)),
     "branch_comp": (("BrSel_bin", 1), ("Data_rs", 32), ("Data_rt", 32), ("Expected_BranchTaken", 1)),
-    "control_unit": (("opcode_bin", 6), ("funct_bin", 6), ("RegWEn", 1), ("DestSel", 2), ("ASel", 2), ("BSel", 3), ("ImmSel", 3), ("BrSel", 3), ("ALUSel", 4), ("WBSel", 2), ("WdLen", 2), ("MemRW", 3), ("LoadEx", 1), ("Branch", 1), ("Jump", 1), ("JumpSel", 2)),
+    "control_unit": (("opcode_bin", 6), ("funct_bin", 6), ("RegWEn", 1), ("DestSel", 2), ("ASel", 2), ("BSel", 3), ("ImmSel", 2), ("BrSel", 1), ("ALUSel", 4), ("WBSel", 2), ("WdLen", 2), ("MemRW", 3), ("LoadEx", 1), ("Branch", 1), ("Jump", 1), ("JumpSel", 1)),
     "data_memory": (("InitialWord", 32), ("Addr", 32), ("Data_rt", 32), ("WdLen_bin", 2), ("MemRW_bin", 3), ("LoadEx", 1), ("Expected_Lane", 2), ("Expected_WE", 4), ("Expected_Data_RD", 32), ("ExpectedNewWord", 32)),
-    "imm_generator": (("ImmSel_bin", 3), ("imm16", 16), ("target26", 26), ("PCPlus4", 32), ("Expected_ImmVal", 32), ("Expected_BranchOff", 32), ("Expected_JumpImmTarget", 32)),
-    "jump_target": (("Jump", 1), ("JumpSel", 2), ("PCPlus4", 32), ("target26", 26), ("Data_rs", 32), ("Expected_JumpImmTarget", 32), ("Expected_SelectedJumpTarget", 32)),
-    "pc_control": (("Branch", 1), ("Jump", 1), ("BranchTakenRaw", 1), ("Expected_BranchTaken", 1), ("Expected_PCSel_bin", 2)),
-    "selectors": (("ASel_bin", 2), ("BSel_bin", 3), ("Data_rs", 32), ("Data_rt", 32), ("PCPlus4", 32), ("ImmVal", 32), ("BranchOff", 32), ("shamt", 5), ("Expected_ALU_A", 32), ("Expected_ALU_B", 32)),
+    "imm_generator": (("ImmSel_bin", 2), ("imm16", 16), ("Expected_ImmVal", 32)),
+    "jump_target": (("Jump", 1), ("JumpSel", 1), ("PCPlus4", 32), ("target26", 26), ("Data_rs", 32), ("Expected_JumpImmTarget", 32), ("Expected_SelectedJumpTarget", 32)),
+    "pc_control": (("Branch", 1), ("Jump", 1), ("BranchTaken", 1), ("Expected_PCSel_bin", 2)),
+    "selectors": (("ASel_bin", 2), ("BSel_bin", 3), ("Data_rs", 32), ("Data_rt", 32), ("PCPlus4", 32), ("ImmVal", 32), ("shamt", 5), ("Expected_ALU_A", 32), ("Expected_ALU_B", 32)),
     "wb_selector": (("WBSel_bin", 2), ("Data_RD", 32), ("ALUResult", 32), ("PCPlus4", 32), ("Expected_Data_WR", 32)),
 }
 

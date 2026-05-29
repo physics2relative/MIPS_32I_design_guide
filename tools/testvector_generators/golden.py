@@ -18,9 +18,9 @@ MASK32 = 0xFFFFFFFF
 DEST = {"RT": 0b00, "RD": 0b01, "RA": 0b10, "NONE": 0b11}
 WB = {"MEM": 0b00, "ALU": 0b01, "PC4": 0b10, "NONE": 0b11}
 ASEL = {"RS": 0b00, "PC4": 0b01, "ZERO": 0b10, "RT": 0b11}
-BSEL = {"RT": 0b000, "IMM": 0b001, "BR_OFFSET": 0b010, "SHAMT": 0b011, "RS_LOW5": 0b100, "ZERO": 0b101, "RESERVED": 0b110, "NONE": 0b111}
-IMMSEL = {"SIGN16": 0b000, "ZERO16": 0b001, "LUI16": 0b010, "BRANCH16": 0b011, "J26": 0b100, "NONE": 0b111}
-BRSEL = {"NONE": 0b000, "EQ": 0b001, "NE": 0b010, "LT_RESERVED": 0b011, "GE_RESERVED": 0b100, "LTU_RESERVED": 0b101, "GEU_RESERVED": 0b110, "RESERVED": 0b111}
+BSEL = {"RT": 0b000, "IMM": 0b001, "SHAMT": 0b010, "RS_LOW5": 0b011, "ZERO": 0b100, "RESERVED5": 0b101, "RESERVED6": 0b110, "NONE": 0b111}
+IMMSEL = {"SIGN16": 0b00, "ZERO16": 0b01, "LUI16": 0b10, "BRANCH16": 0b11}
+BRSEL = {"EQ": 0b0, "NE": 0b1}
 ALU = {"ADD": 0b0000, "SUB": 0b0001, "AND": 0b0010, "OR": 0b0011, "XOR": 0b0100, "SLT": 0b0101, "SLTU": 0b0110, "SLL": 0b0111, "SRL": 0b1000, "SRA": 0b1001, "NOR": 0b1010, "NONE": 0b1111}
 WDLEN = {"BYTE": 0b00, "HALF": 0b01, "WORD": 0b10, "NONE": 0b11}
 MEMRW = {"SB": 0b000, "SH": 0b001, "SW": 0b010, "LOAD": 0b011, "IDLE": 0b100}
@@ -91,15 +91,13 @@ def alu_result(a: int, b: int, sel: int) -> int:
 
 
 def imm_values(imm16: int, target26: int, pc_plus4: int) -> dict:
+    del target26, pc_plus4
     sign16 = sign_extend(imm16, 16)
     return {
         "ImmSign16": sign16,
         "ImmZero16": zero_extend(imm16, 16),
         "ImmLui16": u32((imm16 & 0xFFFF) << 16),
-        "BranchOff": u32(sign16 << 2),
-        "Target26Raw": target26 & 0x03FFFFFF,
-        "JumpImmTarget": jump_imm_target(pc_plus4, target26),
-        "ImmNone": 0,
+        "ImmBranch16": u32(sign16 << 2),
     }
 
 
@@ -112,11 +110,7 @@ def imm_by_sel(imm16: int, target26: int, pc_plus4: int, imm_sel: int) -> int:
     if imm_sel == IMMSEL["LUI16"]:
         return vals["ImmLui16"]
     if imm_sel == IMMSEL["BRANCH16"]:
-        return vals["BranchOff"]
-    if imm_sel == IMMSEL["J26"]:
-        return vals["JumpImmTarget"]
-    if imm_sel == IMMSEL["NONE"]:
-        return 0
+        return vals["ImmBranch16"]
     return 0
 
 
@@ -129,15 +123,15 @@ def select_a(data_rs: int, data_rt: int, pc_plus4: int, a_sel: int) -> int:
     }.get(a_sel, 0)
 
 
-def select_b(data_rs: int, data_rt: int, imm_val: int, branch_off: int, shamt: int, b_sel: int) -> int:
+def select_b(data_rs: int, data_rt: int, imm_val: int, shamt: int, b_sel: int) -> int:
     return {
         BSEL["RT"]: u32(data_rt),
         BSEL["IMM"]: u32(imm_val),
-        BSEL["BR_OFFSET"]: u32(branch_off),
         BSEL["SHAMT"]: shamt & 0x1F,
         BSEL["RS_LOW5"]: data_rs & 0x1F,
         BSEL["ZERO"]: 0,
-        BSEL["RESERVED"]: 0,
+        BSEL["RESERVED5"]: 0,
+        BSEL["RESERVED6"]: 0,
         BSEL["NONE"]: 0,
     }.get(b_sel, 0)
 
@@ -169,13 +163,12 @@ def selected_jump_target(pc_plus4: int, target26: int, data_rs: int, jump_sel: i
     return jump_imm_target(pc_plus4, target26) if jump_sel == 0 else u32(data_rs)
 
 
-def pc_control(branch: int, jump: int, taken_raw: int) -> tuple[int, int]:
-    taken = 1 if branch and taken_raw else 0
+def pc_control(branch: int, jump: int, branch_taken: int) -> int:
     if jump:
-        return PCSEL["PC_JUMP"], taken
-    if taken:
-        return PCSEL["PC_BRANCH"], taken
-    return PCSEL["PC_PLUS4"], taken
+        return PCSEL["PC_JUMP"]
+    if branch and branch_taken:
+        return PCSEL["PC_BRANCH"]
+    return PCSEL["PC_PLUS4"]
 
 
 def wb_data(data_rd: int, alu: int, pc_plus4: int, wb_sel: int) -> int:
@@ -230,7 +223,7 @@ def data_memory_result(initial_word: int, addr: int, data_rt: int, wd_len: int, 
 
 
 def control_rows() -> list[dict]:
-    n = {"RegWEn": 0, "DestSel": DEST["NONE"], "ASel": ASEL["ZERO"], "BSel": BSEL["ZERO"], "ImmSel": IMMSEL["NONE"], "BrSel": BRSEL["NONE"], "ALUSel": ALU["NONE"], "WBSel": WB["NONE"], "WdLen": WDLEN["NONE"], "MemRW": MEMRW["IDLE"], "LoadEx": 0, "Branch": 0, "Jump": 0, "JumpSel": 0}
+    n = {"RegWEn": 0, "DestSel": DEST["NONE"], "ASel": ASEL["ZERO"], "BSel": BSEL["ZERO"], "ImmSel": IMMSEL["SIGN16"], "BrSel": BRSEL["EQ"], "ALUSel": ALU["NONE"], "WBSel": WB["NONE"], "WdLen": WDLEN["NONE"], "MemRW": MEMRW["IDLE"], "LoadEx": 0, "Branch": 0, "Jump": 0, "JumpSel": 0}
     rows = []
 
     def add(instr, opcode, funct, **kw):
@@ -256,10 +249,10 @@ def control_rows() -> list[dict]:
         add(instr, opcode, None, RegWEn=1, DestSel=DEST["RT"], ASel=ASEL["RS"], BSel=BSEL["IMM"], ImmSel=IMMSEL["SIGN16"], ALUSel=ALU["ADD"], WBSel=WB["MEM"], WdLen=WDLEN[wd], MemRW=MEMRW["LOAD"], LoadEx=load_ex)
     for instr, opcode, wd, memrw in [("sb", 0x28, "BYTE", "SB"), ("sh", 0x29, "HALF", "SH"), ("sw", 0x2B, "WORD", "SW")]:
         add(instr, opcode, None, ASel=ASEL["RS"], BSel=BSEL["IMM"], ImmSel=IMMSEL["SIGN16"], ALUSel=ALU["ADD"], WdLen=WDLEN[wd], MemRW=MEMRW[memrw])
-    add("beq", 0x04, None, ASel=ASEL["PC4"], BSel=BSEL["BR_OFFSET"], ImmSel=IMMSEL["BRANCH16"], BrSel=BRSEL["EQ"], ALUSel=ALU["ADD"], Branch=1)
-    add("bne", 0x05, None, ASel=ASEL["PC4"], BSel=BSEL["BR_OFFSET"], ImmSel=IMMSEL["BRANCH16"], BrSel=BRSEL["NE"], ALUSel=ALU["ADD"], Branch=1)
-    add("j", 0x02, None, BSel=BSEL["NONE"], ImmSel=IMMSEL["J26"], Jump=1, JumpSel=0)
-    add("jal", 0x03, None, RegWEn=1, DestSel=DEST["RA"], BSel=BSEL["NONE"], ImmSel=IMMSEL["J26"], WBSel=WB["PC4"], Jump=1, JumpSel=0)
+    add("beq", 0x04, None, ASel=ASEL["PC4"], BSel=BSEL["IMM"], ImmSel=IMMSEL["BRANCH16"], BrSel=BRSEL["EQ"], ALUSel=ALU["ADD"], Branch=1)
+    add("bne", 0x05, None, ASel=ASEL["PC4"], BSel=BSEL["IMM"], ImmSel=IMMSEL["BRANCH16"], BrSel=BRSEL["NE"], ALUSel=ALU["ADD"], Branch=1)
+    add("j", 0x02, None, BSel=BSEL["NONE"], ImmSel=IMMSEL["SIGN16"], Jump=1, JumpSel=0)
+    add("jal", 0x03, None, RegWEn=1, DestSel=DEST["RA"], BSel=BSEL["NONE"], ImmSel=IMMSEL["SIGN16"], WBSel=WB["PC4"], Jump=1, JumpSel=0)
     add("jr", 0x00, 0x08, ASel=ASEL["RS"], BSel=BSEL["NONE"], Jump=1, JumpSel=1)
     add("jalr", 0x00, 0x09, RegWEn=1, DestSel=DEST["RD"], ASel=ASEL["RS"], BSel=BSEL["NONE"], WBSel=WB["PC4"], Jump=1, JumpSel=1)
     add("unknown_safe_nop", 0x3F, None)
@@ -347,18 +340,17 @@ LOGISIM_HEX_FIELDS = {
         "Expected_WriteReg", "Expected_WriteAccepted", "Expected_Data_rs", "Expected_Data_rt",
     ],
     "imm_generator": [
-        "ImmSel_bin", "imm16", "target26", "PCPlus4",
-        "Expected_ImmVal", "Expected_BranchOff", "Expected_JumpImmTarget",
+        "ImmSel_bin", "imm16", "Expected_ImmVal",
     ],
     "selectors": [
-        "ASel_bin", "BSel_bin", "Data_rs", "Data_rt", "PCPlus4", "ImmVal", "BranchOff", "shamt",
+        "ASel_bin", "BSel_bin", "Data_rs", "Data_rt", "PCPlus4", "ImmVal", "shamt",
         "Expected_ALU_A", "Expected_ALU_B",
     ],
     "control_unit": [
         "opcode_bin", "funct_bin", "RegWEn", "DestSel", "ASel", "BSel",
         "ImmSel", "BrSel", "ALUSel", "WBSel", "WdLen", "MemRW", "LoadEx", "Branch", "Jump", "JumpSel",
     ],
-    "branch_comp": ["Branch", "BrSel_bin", "Data_rs", "Data_rt", "Expected_BranchTakenRaw", "Expected_BranchTaken"],
+    "branch_comp": ["BrSel_bin", "Data_rs", "Data_rt", "Expected_BranchTaken"],
     "jump_target": [
         "Jump", "JumpSel", "PCPlus4", "target26", "Data_rs",
         "Expected_JumpImmTarget", "Expected_SelectedJumpTarget",
@@ -368,7 +360,7 @@ LOGISIM_HEX_FIELDS = {
         "Expected_Lane", "Expected_WE", "Expected_Data_RD", "ExpectedNewWord",
     ],
     "wb_selector": ["WBSel_bin", "Data_RD", "ALUResult", "PCPlus4", "Expected_Data_WR"],
-    "pc_control": ["Branch", "Jump", "BranchTakenRaw", "Expected_BranchTaken", "Expected_PCSel_bin"],
+    "pc_control": ["Branch", "Jump", "BranchTaken", "Expected_PCSel_bin"],
 }
 
 
@@ -442,18 +434,18 @@ def imm_vectors() -> list[dict]:
     rows = []
     cases = [(0x0000, 0x0000001, 0x00400004), (0x7FFF, 0x0001234, 0x0FFFFFFC), (0x8000, 0x3FFFFFF, 0x10000004), (0xFFFF, 0x1555555, 0x80000004)]
     for i, (imm16, target26, pc4) in enumerate(cases):
-        vals = imm_values(imm16, target26, pc4)
-        for name, sel in [("SIGN16", IMMSEL["SIGN16"]), ("ZERO16", IMMSEL["ZERO16"]), ("LUI16", IMMSEL["LUI16"]), ("BRANCH16", IMMSEL["BRANCH16"]), ("J26", IMMSEL["J26"]), ("NONE", IMMSEL["NONE"] )]:
-            rows.append({"case": f"{i}_{name}", "ImmSel_bin": bin_n(sel, 3), "imm16": hexn(imm16, 16), "target26": hexn(target26, 26), "PCPlus4": hex32(pc4), "Expected_ImmVal": hex32(imm_by_sel(imm16, target26, pc4, sel)), "Expected_BranchOff": hex32(vals["BranchOff"]), "Expected_Target26Raw": hexn(vals["Target26Raw"], 26), "Expected_JumpImmTarget": hex32(vals["JumpImmTarget"])})
+        for name, sel in [("SIGN16", IMMSEL["SIGN16"]), ("ZERO16", IMMSEL["ZERO16"]), ("LUI16", IMMSEL["LUI16"]), ("BRANCH16", IMMSEL["BRANCH16"] )]:
+            imm_expected = imm_by_sel(imm16, target26, pc4, sel)
+            rows.append({"case": f"{i}_{name}", "ImmSel_bin": bin_n(sel, 2), "imm16": hexn(imm16, 16), "Expected_ImmVal": hex32(imm_expected)})
     return rows
 
 
 def selector_vectors() -> list[dict]:
     rows = []
-    sample = {"Data_rs": 0x12345678, "Data_rt": 0x89ABCDEF, "PCPlus4": 0x00400004, "ImmVal": 0xFFFF8000, "BranchOff": 0xFFFFFFFC, "shamt": 0x1E}
+    sample = {"Data_rs": 0x12345678, "Data_rt": 0x89ABCDEF, "PCPlus4": 0x00400004, "ImmVal": 0xFFFF8000, "shamt": 0x1E}
     for a_sel in [ASEL["RS"], ASEL["PC4"], ASEL["ZERO"], ASEL["RT"]]:
-        for b_sel in [BSEL["RT"], BSEL["IMM"], BSEL["BR_OFFSET"], BSEL["SHAMT"], BSEL["RS_LOW5"], BSEL["ZERO"], BSEL["RESERVED"], BSEL["NONE"]]:
-            rows.append({"ASel_bin": bin_n(a_sel, 2), "BSel_bin": bin_n(b_sel, 3), **{k: hex32(v) if k != "shamt" else hexn(v, 5) for k, v in sample.items()}, "Expected_ALU_A": hex32(select_a(sample["Data_rs"], sample["Data_rt"], sample["PCPlus4"], a_sel)), "Expected_ALU_B": hex32(select_b(sample["Data_rs"], sample["Data_rt"], sample["ImmVal"], sample["BranchOff"], sample["shamt"], b_sel))})
+        for b_sel in [BSEL["RT"], BSEL["IMM"], BSEL["SHAMT"], BSEL["RS_LOW5"], BSEL["ZERO"], BSEL["RESERVED5"], BSEL["RESERVED6"], BSEL["NONE"]]:
+            rows.append({"ASel_bin": bin_n(a_sel, 2), "BSel_bin": bin_n(b_sel, 3), **{k: hex32(v) if k != "shamt" else hexn(v, 5) for k, v in sample.items()}, "Expected_ALU_A": hex32(select_a(sample["Data_rs"], sample["Data_rt"], sample["PCPlus4"], a_sel)), "Expected_ALU_B": hex32(select_b(sample["Data_rs"], sample["Data_rt"], sample["ImmVal"], sample["shamt"], b_sel))})
     return rows
 
 
@@ -461,20 +453,35 @@ def control_vectors() -> list[dict]:
     rows = []
     for r in control_rows():
         row = {"Instruction": r["Instruction"], "opcode_bin": bin_n(r["opcode"], 6), "funct_bin": bin_n(0 if r["funct"] is None else r["funct"], 6), "funct_dontcare": 1 if r["funct"] is None else 0}
-        for name, width in [("RegWEn", 1), ("DestSel", 2), ("ASel", 2), ("BSel", 3), ("ImmSel", 3), ("BrSel", 3), ("ALUSel", 4), ("WBSel", 2), ("WdLen", 2), ("MemRW", 3), ("LoadEx", 1), ("Branch", 1), ("Jump", 1), ("JumpSel", 1)]:
+        for name, width in [("RegWEn", 1), ("DestSel", 2), ("ASel", 2), ("BSel", 3), ("ImmSel", 2), ("BrSel", 1), ("ALUSel", 4), ("WBSel", 2), ("WdLen", 2), ("MemRW", 3), ("LoadEx", 1), ("Branch", 1), ("Jump", 1), ("JumpSel", 1)]:
             row[name] = bin_n(r[name], width)
         rows.append(row)
     return rows
 
 
 def branch_vectors() -> list[dict]:
+    """Current BranchComp vectors: 1-bit BrSel only, no Branch enable input.
+
+    Branch enable gating belongs to PCControl/NextPC.  BrSel=0 means EQ/beq
+    condition and BrSel=1 means NE/bne condition.
+    """
     rows = []
-    cases = [(0x1, 0x1), (0x1, 0x2), (0xFFFFFFFF, 0xFFFFFFFF)]
-    for branch in [0, 1]:
-        for br_sel in [BRSEL["NONE"], BRSEL["EQ"], BRSEL["NE"], BRSEL["LT_RESERVED"], BRSEL["RESERVED"]]:
-            for rs, rt in cases:
-                raw = branch_taken_raw(rs, rt, br_sel)
-                rows.append({"Branch": branch, "BrSel_bin": bin_n(br_sel, 3), "Data_rs": hex32(rs), "Data_rt": hex32(rt), "Expected_BranchTakenRaw": raw, "Expected_BranchTaken": 1 if branch and raw else 0})
+    cases = [
+        (0x00000001, 0x00000001),
+        (0x00000001, 0x00000002),
+        (0xFFFFFFFF, 0xFFFFFFFF),
+        (0x80000000, 0x7FFFFFFF),
+        (0x00000000, 0x00000000),
+    ]
+    for br_sel in [BRSEL["EQ"], BRSEL["NE"]]:
+        for rs, rt in cases:
+            taken = branch_taken_raw(rs, rt, br_sel)
+            rows.append({
+                "BrSel_bin": bin_n(br_sel, 1),
+                "Data_rs": hex32(rs),
+                "Data_rt": hex32(rt),
+                "Expected_BranchTaken": taken,
+            })
     return rows
 
 
@@ -515,9 +522,9 @@ def pc_control_vectors() -> list[dict]:
     rows = []
     for branch in [0, 1]:
         for jump in [0, 1]:
-            for raw in [0, 1]:
-                pcsel, taken = pc_control(branch, jump, raw)
-                rows.append({"Branch": branch, "Jump": jump, "BranchTakenRaw": raw, "Expected_BranchTaken": taken, "Expected_PCSel_bin": bin_n(pcsel, 2)})
+            for taken in [0, 1]:
+                pcsel = pc_control(branch, jump, taken)
+                rows.append({"Branch": branch, "Jump": jump, "BranchTaken": taken, "Expected_PCSel_bin": bin_n(pcsel, 2)})
     return rows
 
 
@@ -597,8 +604,19 @@ def generate_all(outdir: Path) -> None:
 
 def compare_trees(expected: Path, actual: Path) -> list[str]:
     diffs = []
-    expected_files = sorted(p.relative_to(expected) for p in expected.rglob("*") if p.is_file())
-    actual_files = sorted(p.relative_to(actual) for p in actual.rglob("*") if p.is_file())
+
+    def comparable_files(base: Path) -> list[Path]:
+        # HDL-oriented vectors.mem files are additive artifacts generated by
+        # tools/tv_gen/generate_all.py from the source CSV/HEX vectors.  They are
+        # intentionally ignored by the source-vector --check path.
+        return sorted(
+            p.relative_to(base)
+            for p in base.rglob("*")
+            if p.is_file() and p.name != "vectors.mem"
+        )
+
+    expected_files = comparable_files(expected)
+    actual_files = comparable_files(actual)
     if expected_files != actual_files:
         missing = sorted(set(expected_files) - set(actual_files))
         extra = sorted(set(actual_files) - set(expected_files))

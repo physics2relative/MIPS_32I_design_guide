@@ -9,7 +9,7 @@ Jump Target Gen은 `{PC+4[31:28], target26, 2'b00}` 32-bit immediate jump target
 | 입력 | 폭 | 출처 | 설명 |
 |---|---:|---|---|
 | `PCPlus4` | 32 | PC+4 | J-type target 상위 4-bit |
-| raw `target26` | 26 | Inst Split | J-type target field 원본. Imm Generator를 우회해 직접 연결하는 것을 권장 |
+| `target26` | 26 | Inst Split | J-type target field 원본. Imm Generator를 거치지 않고 직접 연결 |
 | `Data_rs` | 32 | Register | `jr/jalr` register target |
 | `JumpSel` | 1 | Control Unit | 단일 사이클: `0=JUMP_IMM26`, `1=JUMP_REG` |
 | `Jump` | 1 | Control Unit | jump instruction 여부 |
@@ -43,7 +43,7 @@ Jump Target Gen은 `{PC+4[31:28], target26, 2'b00}` 32-bit immediate jump target
 
 ## Caveat / 주의사항
 
-파이프라인 명세의 `JumpSel[1:0]`은 `00=JUMP_NONE`, `01=JUMP_IMM26`, `10=JUMP_REG`입니다. 단일 사이클 diagram의 `Jump Sel`은 2-input mux이므로 1-bit selector로 문서화합니다. Imm Generator가 32-bit jump target을 다시 만들지 않도록 block 경계를 유지하고, raw `target26`은 Inst Split에서 직접 받는 배선을 권장합니다.
+파이프라인 명세의 `JumpSel[1:0]`은 `00=JUMP_NONE`, `01=JUMP_IMM26`, `10=JUMP_REG`입니다. 단일 사이클 diagram의 `Jump Sel`은 2-input mux이므로 1-bit selector로 문서화합니다. Imm Generator가 32-bit jump target을 다시 만들지 않도록 block 경계를 유지하고, `target26`은 Inst Split에서 직접 받습니다.
 
 ## 파이프라인 확장 시 메모
 

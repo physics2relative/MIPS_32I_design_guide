@@ -80,7 +80,7 @@ python3 tools/testvector_generators/generate_all.py --check --out test_vectors/g
 |---|---|---|
 | ALU | `test_vectors/generated/alu/` | `ALUResult` |
 | Register File / DestSel | `test_vectors/generated/register_file/` | `WriteReg`, `Data_rs`, `Data_rt`, write accept 여부 |
-| Imm Generator | `test_vectors/generated/imm_generator/` | `ImmVal`, `BranchOff`, jump target reference |
+| Imm Generator | `test_vectors/generated/imm_generator/` | `ImmVal` (sign/zero/lui/branch offset) |
 | A/B Selectors | `test_vectors/generated/selectors/` | `ALU_A`, `ALU_B` |
 | Control Unit | `test_vectors/generated/control_unit/` | instruction별 control bundle |
 | Branch Comp | `test_vectors/generated/branch_comp/` | 1-bit `BrSel` 기준 `BranchTaken` 조건 |
