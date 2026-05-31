@@ -6,7 +6,7 @@
 | Instruction Memory / Inst Split | `PC` | `Inst`, `opcode`, `rs`, `rt`, `rd`, `shamt`, `funct`, `imm16`, `target26` | 없음 | MIPS field split은 명세서 bit range를 따릅니다. |
 | Register / Dest Sel | `Addr_rs`, `Addr_rt`, `Addr_WR`, `Data_WR`, `RegWEn` | `Data_rs`, `Data_rt`, `WriteReg` | `RegWEn`, `DestSel` | `$zero` write 무시는 register file 내부 책임입니다. |
 | Imm Generator | `imm16`, `ImmSel[1:0]` | `ImmVal` | `ImmSel` | sign/zero/lui/branch offset 즉시값만 만들고, branch offset은 `ImmVal`로 출력합니다. 32-bit jump target 생성은 Jump Target Gen에 위임합니다. |
-| Jump Target Gen / Jump Sel | `PC+4`, `target26`, `Data_rs`, `JumpSel` | `JumpImmTarget`, `SelectedJumpTarget` | `JumpSel`, `Jump` | Inst Split의 `target26`을 직접 받아 `{PC+4[31:28], target26, 2'b00}`을 생성합니다. |
+| Jump Target Gen / Jump Sel | Gen: `PC+4`, `target26`; Sel mux: `JumpImmTarget`, `Data_rs`, `JumpSel` | `JumpImmTarget`, `SelectedJumpTarget` | `JumpSel`; `Jump`는 PCControl | Gen은 `{PC+4[31:28], target26, 2'b00}`만 만들고, rs/imm 선택 mux는 밖에 둡니다. |
 | Control Unit | `opcode[5:0]`, `funct[5:0]` | 모든 datapath control | 전체 control | 기본값을 안전한 NOP로 두고 opcode/funct별 override합니다. |
 | A Selector / B Selector | `Data_rs`, `Data_rt`, `PC+4`, `ImmVal`, `shamt`, constants | `ALU_A`, `ALU_B` | `ASel`, `BSel` | branch도 `ImmVal`을 `B_IMM`으로 선택합니다. selector input order는 명세서 encoding과 1:1로 맞춥니다. |
 | ALU | `ALU_A`, `ALU_B`, `ALUSel` | `ALUResult` | `ALUSel` | add/sub/logic/slt/sltu/shift/nor를 구현합니다. |

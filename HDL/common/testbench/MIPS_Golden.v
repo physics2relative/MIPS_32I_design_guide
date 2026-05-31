@@ -118,6 +118,7 @@ module MIPS_Golden #(
     reg [7:0]  t_b1;
     reg [7:0]  t_b2;
     reg [7:0]  t_b3;
+    reg        t_misaligned;
 
     // ---------------------------------------------------------
     // Utility helpers
@@ -256,6 +257,7 @@ module MIPS_Golden #(
                 t_rt_val     = regs[t_rt];
                 t_rs_s       = regs[t_rs];
                 t_rt_s       = regs[t_rt];
+                t_misaligned = 1'b0;
                 t_sign_imm   = {{16{t_imm16[15]}}, t_imm16};
                 t_zero_imm   = {16'h0000, t_imm16};
                 t_branch_off = {{14{t_imm16[15]}}, t_imm16, 2'b00};
@@ -350,28 +352,40 @@ module MIPS_Golden #(
                         t_we   = 1'b1;
                         t_waddr = t_rt;
                         t_addr = addr_wrap(t_rs_val + t_sign_imm);
-                        t_b0 = dmem[addr_wrap(t_addr + 0)];
-                        t_b1 = dmem[addr_wrap(t_addr + 1)];
-                        t_b2 = dmem[addr_wrap(t_addr + 2)];
-                        t_b3 = dmem[addr_wrap(t_addr + 3)];
-                        case (t_opcode)
-                            OP_LB:  t_result = {{24{t_b0[7]}}, t_b0};
-                            OP_LBU: t_result = {24'h000000, t_b0};
-                            OP_LH:  t_result = {{16{t_b1[7]}}, t_b1, t_b0};
-                            OP_LHU: t_result = {16'h0000, t_b1, t_b0};
-                            OP_LW:  t_result = {t_b3, t_b2, t_b1, t_b0};
-                        endcase
+                        t_misaligned = (((t_opcode == OP_LH) || (t_opcode == OP_LHU)) && ((t_addr & 1) != 0)) ||
+                                       ((t_opcode == OP_LW) && ((t_addr & 3) != 0));
+                        if (!t_misaligned) begin
+                            t_b0 = dmem[addr_wrap(t_addr + 0)];
+                            t_b1 = dmem[addr_wrap(t_addr + 1)];
+                            t_b2 = dmem[addr_wrap(t_addr + 2)];
+                            t_b3 = dmem[addr_wrap(t_addr + 3)];
+                            case (t_opcode)
+                                OP_LB:  t_result = {{24{t_b0[7]}}, t_b0};
+                                OP_LBU: t_result = {24'h000000, t_b0};
+                                OP_LH:  t_result = {{16{t_b1[7]}}, t_b1, t_b0};
+                                OP_LHU: t_result = {16'h0000, t_b1, t_b0};
+                                OP_LW:  t_result = {t_b3, t_b2, t_b1, t_b0};
+                            endcase
+                        end else begin
+                            // The project has no exception/trap path.  Misaligned half/word
+                            // loads are treated as an idle memory access and return zero.
+                            t_result = 32'h0000_0000;
+                        end
                     end
 
                     OP_SB, OP_SH, OP_SW: begin
                         t_addr = addr_wrap(t_rs_val + t_sign_imm);
-                        dmem[addr_wrap(t_addr + 0)] <= t_rt_val[7:0];
-                        if ((t_opcode == OP_SH) || (t_opcode == OP_SW)) begin
-                            dmem[addr_wrap(t_addr + 1)] <= t_rt_val[15:8];
-                        end
-                        if (t_opcode == OP_SW) begin
-                            dmem[addr_wrap(t_addr + 2)] <= t_rt_val[23:16];
-                            dmem[addr_wrap(t_addr + 3)] <= t_rt_val[31:24];
+                        t_misaligned = ((t_opcode == OP_SH) && ((t_addr & 1) != 0)) ||
+                                       ((t_opcode == OP_SW) && ((t_addr & 3) != 0));
+                        if (!t_misaligned) begin
+                            dmem[addr_wrap(t_addr + 0)] <= t_rt_val[7:0];
+                            if ((t_opcode == OP_SH) || (t_opcode == OP_SW)) begin
+                                dmem[addr_wrap(t_addr + 1)] <= t_rt_val[15:8];
+                            end
+                            if (t_opcode == OP_SW) begin
+                                dmem[addr_wrap(t_addr + 2)] <= t_rt_val[23:16];
+                                dmem[addr_wrap(t_addr + 3)] <= t_rt_val[31:24];
+                            end
                         end
                     end
 

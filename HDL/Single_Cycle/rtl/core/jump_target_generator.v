@@ -3,22 +3,19 @@
 // =============================================================
 // MIPS Jump Target Generator
 // -------------------------------------------------------------
-// Receives instruction[25:0] (`target26`) directly from instruction
-// split logic and combines it with PCPlus4[31:28].
+// Pure combinational generator for J-type immediate jump target.
+// It only owns the MIPS address concatenation:
+//   JumpImmTarget = {PCPlus4[31:28], target26, 2'b00}
+//
+// The rs-vs-immediate target selection is intentionally kept outside this
+// module as the Jump Sel mux, because that mux also depends on forwarded rs in
+// the pipelined datapath.
 // =============================================================
 
 module jump_target_generator (
-    input        Jump,
-    input        JumpSel,
-    input [31:0] PCPlus4,
-    input [25:0] target26,
-    input [31:0] Data_rs,
-    output [31:0] JumpImmTarget,
-    output [31:0] SelectedJumpTarget
+    input  [31:0] PCPlus4,
+    input  [25:0] target26,
+    output [31:0] JumpImmTarget
 );
-    wire unused_jump;
-    assign unused_jump = Jump;
-
     assign JumpImmTarget = {PCPlus4[31:28], target26, 2'b00};
-    assign SelectedJumpTarget = JumpSel ? Data_rs : JumpImmTarget;
 endmodule

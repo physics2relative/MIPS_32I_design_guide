@@ -21,7 +21,7 @@ module control_unit (
     output reg [3:0] ALUSel,
     output reg [1:0] WBSel,
     output reg [1:0] WdLen,
-    output reg [2:0] MemRW,
+    output reg [1:0] MemRW,
     output reg       LoadEx,
     output reg       Branch,
     output reg       Jump,
@@ -122,11 +122,9 @@ module control_unit (
     localparam [1:0] MEM_WORD = 2'b10;
     localparam [1:0] MEM_NONE_LEN = 2'b11;
 
-    localparam [2:0] MEM_SB   = 3'b000;
-    localparam [2:0] MEM_SH   = 3'b001;
-    localparam [2:0] MEM_SW   = 3'b010;
-    localparam [2:0] MEM_LOAD = 3'b011;
-    localparam [2:0] MEM_IDLE = 3'b100;
+    localparam [1:0] MEM_IDLE  = 2'b00;
+    localparam [1:0] MEM_LOAD  = 2'b01;
+    localparam [1:0] MEM_STORE = 2'b10;
 
     task set_nop;
         begin
@@ -221,7 +219,6 @@ module control_unit (
 
     task set_store;
         input [1:0] width_sel;
-        input [2:0] mem_op;
         begin
             RegWEn  = 1'b0;
             DestSel = DEST_NONE;
@@ -232,7 +229,7 @@ module control_unit (
             ALUSel  = ALU_ADD;
             WBSel   = WB_NONE;
             WdLen   = width_sel;
-            MemRW   = mem_op;
+            MemRW   = MEM_STORE;
             LoadEx  = 1'b0;
             Branch  = 1'b0;
             Jump    = 1'b0;
@@ -309,9 +306,9 @@ module control_unit (
             OP_LH:  set_load(MEM_HALF, 1'b0);
             OP_LHU: set_load(MEM_HALF, 1'b1);
             OP_LW:  set_load(MEM_WORD, 1'b0);
-            OP_SB:  set_store(MEM_BYTE, MEM_SB);
-            OP_SH:  set_store(MEM_HALF, MEM_SH);
-            OP_SW:  set_store(MEM_WORD, MEM_SW);
+            OP_SB:  set_store(MEM_BYTE);
+            OP_SH:  set_store(MEM_HALF);
+            OP_SW:  set_store(MEM_WORD);
             OP_BEQ: begin
                 RegWEn  = 1'b0;
                 DestSel = DEST_NONE;

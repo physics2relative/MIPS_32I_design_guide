@@ -58,8 +58,8 @@ module mips_pipeline_top #(
     localparam [1:0] PC_BRANCH = 2'b01;
     localparam [1:0] PC_JUMP   = 2'b10;
 
-    localparam [2:0] MEM_LOAD = 3'b011;
-    localparam [2:0] MEM_IDLE = 3'b100;
+    localparam [1:0] MEM_IDLE = 2'b00;
+    localparam [1:0] MEM_LOAD = 2'b01;
 
     localparam [1:0] FWD_REG = 2'b00;
     localparam [1:0] FWD_WB  = 2'b01;
@@ -163,7 +163,7 @@ module mips_pipeline_top #(
     wire [3:0] ALUSel_ID;
     wire [1:0] WBSel_ID;
     wire [1:0] WdLen_ID;
-    wire [2:0] MemRW_ID;
+    wire [1:0] MemRW_ID;
     wire       LoadEx_ID;
     wire       Branch_ID;
     wire       Jump_ID;
@@ -238,16 +238,13 @@ module mips_pipeline_top #(
     assign Data_rt_ID = Data_rt_ID_raw;
 
     // Jump immediate target generation stays in ID because it only needs
-    // target26 and PC+4.  JumpSel/register target selection is performed in EX.
+    // target26 and PC+4.  JumpSel/register target selection is performed in EX
+    // after normal forwarding can supply the latest rs value.
     wire [31:0] JumpImmTarget_ID;
     jump_target_generator u_jump_target (
-        .Jump(Jump_ID),
-        .JumpSel(1'b0),
         .PCPlus4(PCPlus4_ID),
         .target26(target26_ID),
-        .Data_rs(32'h0000_0000),
-        .JumpImmTarget(JumpImmTarget_ID),
-        .SelectedJumpTarget()
+        .JumpImmTarget(JumpImmTarget_ID)
     );
 
     // =========================================================
@@ -272,7 +269,7 @@ module mips_pipeline_top #(
     reg [3:0]  ALUSel_EX;
     reg [1:0]  WBSel_EX;
     reg [1:0]  WdLen_EX;
-    reg [2:0]  MemRW_EX;
+    reg [1:0]  MemRW_EX;
     reg        LoadEx_EX;
     reg        Branch_EX;
     reg        Jump_EX;
@@ -416,7 +413,7 @@ module mips_pipeline_top #(
     reg [4:0]  DestReg_MEM;
     reg [1:0]  WBSel_MEM;
     reg [1:0]  WdLen_MEM;
-    reg [2:0]  MemRW_MEM;
+    reg [1:0]  MemRW_MEM;
     reg        LoadEx_MEM;
     reg        RegWEn_MEM;
 
@@ -454,6 +451,7 @@ module mips_pipeline_top #(
     // MEM stage blocks
     // =========================================================
     wire [31:0] Data_RD_WB;
+    wire DataMemoryMisalignedAccess_MEM;
 
     data_memory #(
         .MEM_AW(DMEM_AW)
@@ -465,7 +463,8 @@ module mips_pipeline_top #(
         .WdLen(WdLen_MEM),
         .MemRW(MemRW_MEM),
         .LoadEx(LoadEx_MEM),
-        .Data_RD(Data_RD_WB)
+        .Data_RD(Data_RD_WB),
+        .MisalignedAccess(DataMemoryMisalignedAccess_MEM)
     );
 
     assign ForwardData_MEM_to_ID = (WBSel_MEM == WB_PC4) ? PCPlus4_MEM :

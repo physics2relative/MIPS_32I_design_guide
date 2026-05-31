@@ -57,7 +57,7 @@ PC -> Instruction Memory -> Inst Split -> Register / Imm Generator / Control Uni
 | `ALUSel` | ALU | 산술/논리/shift/slt 연산 선택 |
 | `WBSel` | WB selector | register write-back data 선택 |
 | `WdLen` | Data Memory | byte/half/word 접근 폭 |
-| `MemRW` | Data Memory | load/store/idle 동작 선택 |
+| `MemRW` | Data Memory | idle/load/store 동작 선택 |
 | `LoadEx` | Data Memory | 부분 word load sign/zero extension |
 | `JumpSel` | Jump Sel | immediate jump vs register jump target 선택 |
 | `Branch`, `Jump` | Jump Branch / PCControl | next PC 우선순위 결정 |
@@ -71,6 +71,8 @@ PC -> Instruction Memory -> Inst Split -> Register / Imm Generator / Control Uni
 - [Imm Generator](blocks/04_imm_generator.md)
 - [Jump Target Gen / Jump Sel](blocks/05_jump_target_gen_jump_sel.md)
 - [Control Unit](blocks/06_control_unit.md)
+- [Control Unit Comparator 방식 상세 가이드](blocks/06_control_unit_comparator_guide.md)
+- [Control Unit ROM 방식 상세 가이드](blocks/06_control_unit_rom_guide.md)
 - [A Selector / B Selector](blocks/07_a_b_selectors.md)
 - [ALU](blocks/08_alu.md)
 - [Branch Comp](blocks/09_branch_comp.md)
@@ -104,7 +106,7 @@ block diagram은 배선 흐름을 보여 주는 그림이고, 최종 의미는 `
 |---|---|---|
 | Control Unit 근처 `Inst[10:6] funct`처럼 보이는 라벨 | MIPS `funct`는 `Inst[5:0]`, `Inst[10:6]`은 `shamt` | Inst Split은 반드시 `funct[5:0]`과 `shamt[10:6]`을 분리합니다. |
 | Imm Generator의 `target26` 출력과 Jump Target Gen | jump target 공식은 `{PC+4[31:28], target26, 2'b00}` | **Jump Target Gen이 32-bit jump target 생성의 단일 owner**입니다. Imm Generator는 raw `target26`을 전달하거나 sign/zero/branch/lui immediate만 생성합니다. |
-| Data Memory 하단 `Byte Sel`, `WE`, `Extension` | 명세 control은 `WdLen[1:0]`, `MemRW[2:0]`, `LoadEx` | Data Memory 내부에서 `Byte Sel=WdLen`, `WE=(MemRW in store ops)`, `Extension=LoadEx`로 adapter를 둡니다. |
+| Data Memory 하단 `Byte Sel`, `WE`, `Extension` | 명세 control은 `WdLen[1:0]`, `MemRW[1:0]`, `LoadEx` | Data Memory 내부에서 `Byte Sel=WdLen`, `WE=(MemRW==MEM_STORE)`, `LoadEn=(MemRW==MEM_LOAD)`, `Extension=LoadEx`로 adapter를 둡니다. |
 | B Selector의 일부 입력만 그림에 표시 | 명세는 `BSel[2:0]` 전체 encoding을 정의 | 예약/NONE 입력은 0에 묶고 control이 선택하지 않게 검증합니다. |
 
 ## 10. Block testvector 검증 가이드

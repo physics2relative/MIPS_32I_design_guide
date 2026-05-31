@@ -23,7 +23,7 @@ IMMSEL = {"SIGN16": 0b00, "ZERO16": 0b01, "LUI16": 0b10, "BRANCH16": 0b11}
 BRSEL = {"EQ": 0b0, "NE": 0b1}
 ALU = {"ADD": 0b0000, "SUB": 0b0001, "AND": 0b0010, "OR": 0b0011, "XOR": 0b0100, "SLT": 0b0101, "SLTU": 0b0110, "SLL": 0b0111, "SRL": 0b1000, "SRA": 0b1001, "NOR": 0b1010, "NONE": 0b1111}
 WDLEN = {"BYTE": 0b00, "HALF": 0b01, "WORD": 0b10, "NONE": 0b11}
-MEMRW = {"SB": 0b000, "SH": 0b001, "SW": 0b010, "LOAD": 0b011, "IDLE": 0b100}
+MEMRW = {"IDLE": 0b00, "LOAD": 0b01, "STORE": 0b10}
 PCSEL = {"PC_PLUS4": 0b00, "PC_BRANCH": 0b01, "PC_JUMP": 0b10, "RESERVED": 0b11}
 
 
@@ -195,11 +195,18 @@ def bytes_to_word(bytes_le: list[int]) -> int:
 def data_memory_result(initial_word: int, addr: int, data_rt: int, wd_len: int, memrw: int, load_ex: int) -> dict:
     lane = addr & 0x3
     b = word_to_bytes(initial_word)
-    write_enable = 1 if memrw in (MEMRW["SB"], MEMRW["SH"], MEMRW["SW"]) else 0
+    is_load = memrw == MEMRW["LOAD"]
+    is_store = memrw == MEMRW["STORE"]
+    is_mem = is_load or is_store
+    misaligned = int(is_mem and (
+        (wd_len == WDLEN["HALF"] and (addr & 0x1) != 0) or
+        (wd_len == WDLEN["WORD"] and (addr & 0x3) != 0)
+    ))
+    write_enable = 1 if is_store and not misaligned and wd_len != WDLEN["NONE"] else 0
     new_word = u32(initial_word)
     data_rd = 0
 
-    if memrw == MEMRW["LOAD"]:
+    if is_load and not misaligned:
         if wd_len == WDLEN["BYTE"]:
             raw = b[lane]
             data_rd = raw if load_ex else sign_extend(raw, 8)
@@ -209,17 +216,18 @@ def data_memory_result(initial_word: int, addr: int, data_rt: int, wd_len: int, 
             data_rd = raw if load_ex else sign_extend(raw, 16)
         elif wd_len == WDLEN["WORD"]:
             data_rd = u32(initial_word)
-    elif memrw == MEMRW["SB"]:
-        b[lane] = data_rt & 0xFF
-        new_word = bytes_to_word(b)
-    elif memrw == MEMRW["SH"]:
-        half_lane = lane & 0x2
-        b[half_lane] = data_rt & 0xFF
-        b[half_lane + 1] = (data_rt >> 8) & 0xFF
-        new_word = bytes_to_word(b)
-    elif memrw == MEMRW["SW"]:
-        new_word = u32(data_rt)
-    return {"WriteEnable": write_enable, "Data_RD": u32(data_rd), "ExpectedNewWord": u32(new_word), "Lane": lane}
+    elif is_store and not misaligned:
+        if wd_len == WDLEN["BYTE"]:
+            b[lane] = data_rt & 0xFF
+            new_word = bytes_to_word(b)
+        elif wd_len == WDLEN["HALF"]:
+            half_lane = lane & 0x2
+            b[half_lane] = data_rt & 0xFF
+            b[half_lane + 1] = (data_rt >> 8) & 0xFF
+            new_word = bytes_to_word(b)
+        elif wd_len == WDLEN["WORD"]:
+            new_word = u32(data_rt)
+    return {"WriteEnable": write_enable, "MisalignedAccess": misaligned, "Data_RD": u32(data_rd), "ExpectedNewWord": u32(new_word), "Lane": lane}
 
 
 def control_rows() -> list[dict]:
@@ -247,8 +255,8 @@ def control_rows() -> list[dict]:
     add("lui", 0x0F, None, RegWEn=1, DestSel=DEST["RT"], ASel=ASEL["ZERO"], BSel=BSEL["IMM"], ImmSel=IMMSEL["LUI16"], ALUSel=ALU["ADD"], WBSel=WB["ALU"])
     for instr, opcode, wd, load_ex in [("lb", 0x20, "BYTE", 0), ("lbu", 0x24, "BYTE", 1), ("lh", 0x21, "HALF", 0), ("lhu", 0x25, "HALF", 1), ("lw", 0x23, "WORD", 0)]:
         add(instr, opcode, None, RegWEn=1, DestSel=DEST["RT"], ASel=ASEL["RS"], BSel=BSEL["IMM"], ImmSel=IMMSEL["SIGN16"], ALUSel=ALU["ADD"], WBSel=WB["MEM"], WdLen=WDLEN[wd], MemRW=MEMRW["LOAD"], LoadEx=load_ex)
-    for instr, opcode, wd, memrw in [("sb", 0x28, "BYTE", "SB"), ("sh", 0x29, "HALF", "SH"), ("sw", 0x2B, "WORD", "SW")]:
-        add(instr, opcode, None, ASel=ASEL["RS"], BSel=BSEL["IMM"], ImmSel=IMMSEL["SIGN16"], ALUSel=ALU["ADD"], WdLen=WDLEN[wd], MemRW=MEMRW[memrw])
+    for instr, opcode, wd in [("sb", 0x28, "BYTE"), ("sh", 0x29, "HALF"), ("sw", 0x2B, "WORD")]:
+        add(instr, opcode, None, ASel=ASEL["RS"], BSel=BSEL["IMM"], ImmSel=IMMSEL["SIGN16"], ALUSel=ALU["ADD"], WdLen=WDLEN[wd], MemRW=MEMRW["STORE"])
     add("beq", 0x04, None, ASel=ASEL["PC4"], BSel=BSEL["IMM"], ImmSel=IMMSEL["BRANCH16"], BrSel=BRSEL["EQ"], ALUSel=ALU["ADD"], Branch=1)
     add("bne", 0x05, None, ASel=ASEL["PC4"], BSel=BSEL["IMM"], ImmSel=IMMSEL["BRANCH16"], BrSel=BRSEL["NE"], ALUSel=ALU["ADD"], Branch=1)
     add("j", 0x02, None, BSel=BSEL["NONE"], ImmSel=IMMSEL["SIGN16"], Jump=1, JumpSel=0)
@@ -266,7 +274,7 @@ def write_csv(path: Path, rows: list[dict], fieldnames: list[str] | None = None)
         return
     fieldnames = fieldnames or list(rows[0].keys())
     with path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         for row in rows:
             writer.writerow({k: row.get(k, "") for k in fieldnames})
@@ -352,12 +360,11 @@ LOGISIM_HEX_FIELDS = {
     ],
     "branch_comp": ["BrSel_bin", "Data_rs", "Data_rt", "Expected_BranchTaken"],
     "jump_target": [
-        "Jump", "JumpSel", "PCPlus4", "target26", "Data_rs",
-        "Expected_JumpImmTarget", "Expected_SelectedJumpTarget",
+        "PCPlus4", "target26", "Expected_JumpImmTarget",
     ],
     "data_memory": [
         "InitialWord", "Addr", "Data_rt", "WdLen_bin", "MemRW_bin", "LoadEx",
-        "Expected_Lane", "Expected_WE", "Expected_Data_RD", "ExpectedNewWord",
+        "Expected_Lane", "Expected_WE", "Expected_MisalignedAccess", "Expected_Data_RD", "ExpectedNewWord",
     ],
     "wb_selector": ["WBSel_bin", "Data_RD", "ALUResult", "PCPlus4", "Expected_Data_WR"],
     "pc_control": ["Branch", "Jump", "BranchTaken", "Expected_PCSel_bin"],
@@ -453,7 +460,7 @@ def control_vectors() -> list[dict]:
     rows = []
     for r in control_rows():
         row = {"Instruction": r["Instruction"], "opcode_bin": bin_n(r["opcode"], 6), "funct_bin": bin_n(0 if r["funct"] is None else r["funct"], 6), "funct_dontcare": 1 if r["funct"] is None else 0}
-        for name, width in [("RegWEn", 1), ("DestSel", 2), ("ASel", 2), ("BSel", 3), ("ImmSel", 2), ("BrSel", 1), ("ALUSel", 4), ("WBSel", 2), ("WdLen", 2), ("MemRW", 3), ("LoadEx", 1), ("Branch", 1), ("Jump", 1), ("JumpSel", 1)]:
+        for name, width in [("RegWEn", 1), ("DestSel", 2), ("ASel", 2), ("BSel", 3), ("ImmSel", 2), ("BrSel", 1), ("ALUSel", 4), ("WBSel", 2), ("WdLen", 2), ("MemRW", 2), ("LoadEx", 1), ("Branch", 1), ("Jump", 1), ("JumpSel", 1)]:
             row[name] = bin_n(r[name], width)
         rows.append(row)
     return rows
@@ -487,27 +494,69 @@ def branch_vectors() -> list[dict]:
 
 def jump_vectors() -> list[dict]:
     rows = []
-    cases = [(0x00400004, 0x0000001, 0x10001000), (0x8ABC0004, 0x03FFFFF, 0xDEADBEEF)]
-    for pc4, target26, rs in cases:
-        for jump in [0, 1]:
-            for jump_sel in [0, 1]:
-                rows.append({"Jump": jump, "JumpSel": jump_sel, "PCPlus4": hex32(pc4), "target26": hexn(target26, 26), "Data_rs": hex32(rs), "Expected_JumpImmTarget": hex32(jump_imm_target(pc4, target26)), "Expected_SelectedJumpTarget": hex32(selected_jump_target(pc4, target26, rs, jump_sel))})
+    cases = [
+        (0x00400004, 0x0000001),
+        (0x8ABC0004, 0x03FFFFF),
+        (0x0FFFFFFC, 0x0000000),
+        (0x10000000, 0x3FFFFFF),
+    ]
+    for pc4, target26 in cases:
+        rows.append({
+            "PCPlus4": hex32(pc4),
+            "target26": hexn(target26, 26),
+            "Expected_JumpImmTarget": hex32(jump_imm_target(pc4, target26)),
+        })
     return rows
 
 
 def data_memory_vectors() -> list[dict]:
+    """Sequential Data Memory vectors for Logisim ROM/counter tests.
+
+    Older vectors assumed a hidden testbench preload of InitialWord before every
+    row.  That made the first load expect data even though the external stimulus
+    had never written memory.  These vectors are self-contained instead: before
+    each checked operation, an explicit aligned word store initializes the target
+    word to 0xAABBCCDD.  Therefore a black-box Logisim testbench can drive only
+    the listed input vectors in order and still see the expected results.
+    """
     rows = []
     init = 0xAABBCCDD
+
+    def append_row(kind: str, before_word: int, addr: int, data: int, wd: int, mem: int, load_ex: int) -> int:
+        res = data_memory_result(before_word, addr, data, wd, mem, load_ex)
+        rows.append({
+            "Scenario": kind,
+            "InitialWord": hex32(before_word),
+            "Addr": hex32(addr),
+            "Data_rt": hex32(data),
+            "WdLen_bin": bin_n(wd, 2),
+            "MemRW_bin": bin_n(mem, 2),
+            "LoadEx": load_ex,
+            "Expected_Lane": res["Lane"],
+            "Expected_WE": res["WriteEnable"],
+            "Expected_MisalignedAccess": res["MisalignedAccess"],
+            "Expected_Data_RD": hex32(res["Data_RD"]),
+            "ExpectedNewWord": hex32(res["ExpectedNewWord"]),
+        })
+        return res["ExpectedNewWord"]
+
+    operations = [
+        ("LB_SIGN", WDLEN["BYTE"], MEMRW["LOAD"], 0, 0),
+        ("LBU_ZERO", WDLEN["BYTE"], MEMRW["LOAD"], 1, 0),
+        ("LH_SIGN", WDLEN["HALF"], MEMRW["LOAD"], 0, 0),
+        ("LHU_ZERO", WDLEN["HALF"], MEMRW["LOAD"], 1, 0),
+        ("LW", WDLEN["WORD"], MEMRW["LOAD"], 0, 0),
+        ("SB", WDLEN["BYTE"], MEMRW["STORE"], 0, 0x00000011),
+        ("SH", WDLEN["HALF"], MEMRW["STORE"], 0, 0x00002233),
+        ("SW", WDLEN["WORD"], MEMRW["STORE"], 0, 0x44556677),
+        ("IDLE", WDLEN["NONE"], MEMRW["IDLE"], 0, 0),
+    ]
+
+    current_word = 0x00000000
     for addr in [0, 1, 2, 3]:
-        for wd, mem, load_ex, data in [
-            (WDLEN["BYTE"], MEMRW["LOAD"], 0, 0), (WDLEN["BYTE"], MEMRW["LOAD"], 1, 0),
-            (WDLEN["HALF"], MEMRW["LOAD"], 0, 0), (WDLEN["HALF"], MEMRW["LOAD"], 1, 0),
-            (WDLEN["WORD"], MEMRW["LOAD"], 0, 0),
-            (WDLEN["BYTE"], MEMRW["SB"], 0, 0x00000011), (WDLEN["HALF"], MEMRW["SH"], 0, 0x00002233), (WDLEN["WORD"], MEMRW["SW"], 0, 0x44556677),
-            (WDLEN["NONE"], MEMRW["IDLE"], 0, 0),
-        ]:
-            res = data_memory_result(init, addr, data, wd, mem, load_ex)
-            rows.append({"InitialWord": hex32(init), "Addr": hex32(addr), "Data_rt": hex32(data), "WdLen_bin": bin_n(wd, 2), "MemRW_bin": bin_n(mem, 3), "LoadEx": load_ex, "Expected_Lane": res["Lane"], "Expected_WE": res["WriteEnable"], "Expected_Data_RD": hex32(res["Data_RD"]), "ExpectedNewWord": hex32(res["ExpectedNewWord"])})
+        for name, wd, mem, load_ex, data in operations:
+            current_word = append_row("INIT_WORD", current_word, addr & ~0x3, init, WDLEN["WORD"], MEMRW["STORE"], 0)
+            current_word = append_row(name, current_word, addr, data, wd, mem, load_ex)
     return rows
 
 

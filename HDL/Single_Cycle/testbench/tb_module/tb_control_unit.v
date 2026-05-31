@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 
 module tb_control_unit;
-    parameter VECTOR_WIDTH = 38;
+    parameter VECTOR_WIDTH = 37;
     parameter MAX_VECTORS  = 1024;
 
     reg [VECTOR_WIDTH-1:0] vectors [0:MAX_VECTORS-1];
@@ -18,7 +18,7 @@ module tb_control_unit;
     wire [3:0] ALUSel;
     wire [1:0] WBSel;
     wire [1:0] WdLen;
-    wire [2:0] MemRW;
+    wire [1:0] MemRW;
     wire       LoadEx;
     wire       Branch;
     wire       Jump;
@@ -33,7 +33,7 @@ module tb_control_unit;
     reg [3:0] exp_ALUSel;
     reg [1:0] exp_WBSel;
     reg [1:0] exp_WdLen;
-    reg [2:0] exp_MemRW;
+    reg [1:0] exp_MemRW;
     reg       exp_LoadEx;
     reg       exp_Branch;
     reg       exp_Jump;
@@ -166,9 +166,9 @@ module tb_control_unit;
                 result_ascii = "FAIL            ";
                 status_ascii = {"MISMATCH ", instr_ascii};
                 $display("CONTROL_MISMATCH index=%0d instr=%0s opcode=%06b funct=%06b", vector_index, instr_ascii, opcode, funct);
-                $display("  got: RegWEn=%0b DestSel=%02b ASel=%02b BSel=%03b ImmSel=%02b BrSel=%0b ALUSel=%04b WBSel=%02b WdLen=%02b MemRW=%03b LoadEx=%0b Branch=%0b Jump=%0b JumpSel=%0b",
+                $display("  got: RegWEn=%0b DestSel=%02b ASel=%02b BSel=%03b ImmSel=%02b BrSel=%0b ALUSel=%04b WBSel=%02b WdLen=%02b MemRW=%02b LoadEx=%0b Branch=%0b Jump=%0b JumpSel=%0b",
                          RegWEn, DestSel, ASel, BSel, ImmSel, BrSel, ALUSel, WBSel, WdLen, MemRW, LoadEx, Branch, Jump, JumpSel);
-                $display("  exp: RegWEn=%0b DestSel=%02b ASel=%02b BSel=%03b ImmSel=%02b BrSel=%0b ALUSel=%04b WBSel=%02b WdLen=%02b MemRW=%03b LoadEx=%0b Branch=%0b Jump=%0b JumpSel=%0b",
+                $display("  exp: RegWEn=%0b DestSel=%02b ASel=%02b BSel=%03b ImmSel=%02b BrSel=%0b ALUSel=%04b WBSel=%02b WdLen=%02b MemRW=%02b LoadEx=%0b Branch=%0b Jump=%0b JumpSel=%0b",
                          exp_RegWEn, exp_DestSel, exp_ASel, exp_BSel, exp_ImmSel, exp_BrSel, exp_ALUSel, exp_WBSel, exp_WdLen, exp_MemRW, exp_LoadEx, exp_Branch, exp_Jump, exp_JumpSel);
             end else begin
                 result_ascii = "PASS            ";

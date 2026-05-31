@@ -84,7 +84,7 @@ python3 tools/testvector_generators/generate_all.py --check --out test_vectors/g
 | A/B Selectors | `test_vectors/generated/selectors/` | `ALU_A`, `ALU_B` |
 | Control Unit | `test_vectors/generated/control_unit/` | instruction별 control bundle |
 | Branch Comp | `test_vectors/generated/branch_comp/` | 1-bit `BrSel` 기준 `BranchTaken` 조건 |
-| Jump Target Gen / Jump Sel | `test_vectors/generated/jump_target/` | `JumpImmTarget`, `SelectedJumpTarget` |
+| Jump Target Gen | `test_vectors/generated/jump_target/` | `JumpImmTarget` |
 | Data Memory | `test_vectors/generated/data_memory/` | load `Data_RD`, store `ExpectedNewWord`, write enable |
 | WB Selector | `test_vectors/generated/wb_selector/` | `Data_WR` |
 | PCControl | `test_vectors/generated/pc_control/` | `PCSel`, `BranchTaken` |

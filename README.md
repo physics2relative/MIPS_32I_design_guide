@@ -411,7 +411,7 @@ JumpSel
 | BrSel | 3 | 분기 비교 종류 선택입니다. 현재 직접 구현 분기는 beq, bne입니다. |
 | `ALUSel` | 4 | ALU operation 선택입니다. |
 | `WdLen` | 2 | load/store 접근 폭입니다. |
-| `MemRW` | 3 | 데이터 메모리 operation 종류입니다. |
+| `MemRW` | 2 | 데이터 메모리 동작 방향입니다. idle/load/store를 구분하고 접근 폭은 `WdLen`이 담당합니다. |
 | LoadEx | 1 | load result extension 방식입니다. 0은 sign-extend, 1은 zero-extend입니다. |
 | `Branch` | 1 | 분기 명령어 여부입니다. |
 | Jump | 1 | 점프 명령어 여부입니다. j/jal/jr/jalr에서 1입니다. |
@@ -516,7 +516,7 @@ JumpSel
 | 1010 | ALU_NOR | ~(A &#124; B) |
 | 1111 | ALU_NONE | ALU result를 사용하지 않습니다. |
 
-##### `WdLen[1:0]`, `MemRW[2:0]`
+##### `WdLen[1:0]`, `MemRW[1:0]`
 
 | 신호 | 값 | 이름 | 의미 |
 | --- | --- | --- | --- |
@@ -524,11 +524,35 @@ JumpSel
 | WdLen | 01 | MEM_HALF | halfword access |
 | WdLen | 10 | MEM_WORD | word access |
 | WdLen | 11 | MEM_NONE | memory access 없음 |
-| MemRW | 000 | MEM_SB | byte store |
-| MemRW | 001 | MEM_SH | halfword store |
-| MemRW | 010 | MEM_SW | word store |
-| MemRW | 011 | MEM_LOAD | load |
-| MemRW | 100 | MEM_IDLE | memory access 없음 |
+| MemRW | 00 | MEM_IDLE | memory access 없음 |
+| MemRW | 01 | MEM_LOAD | load |
+| MemRW | 10 | MEM_STORE | store |
+| MemRW | 11 | RESERVED | 예약 |
+
+
+##### Data Memory alignment / misaligned access policy
+
+본 설계는 exception/trap 경로를 구현하지 않습니다. 따라서 Data Memory 내부에서 half/word misaligned access를 **idle 처리**합니다. 이 정책은 Logisim 회로, Single Cycle RTL, 5-stage Pipeline RTL, Data Memory test vector golden reference가 동일하게 따릅니다.
+
+```text
+HalfMisaligned = (WdLen == MEM_HALF) & Addr[0]
+WordMisaligned = (WdLen == MEM_WORD) & (Addr[1] | Addr[0])
+MisalignedAccess = (MemRW == MEM_LOAD or MEM_STORE) &
+                   (HalfMisaligned | WordMisaligned)
+```
+
+동작 규칙은 다음과 같습니다.
+
+| 접근 | aligned 조건 | misaligned일 때 동작 |
+| --- | --- | --- |
+| byte load/store | 항상 aligned로 취급 | 정상 byte lane 접근 |
+| half load/store | `Addr[0] == 0` | load는 `Data_RD=0`, store는 write disable |
+| word load/store | `Addr[1:0] == 00` | load는 `Data_RD=0`, store는 write disable |
+
+- misaligned store는 memory word를 변경하지 않습니다.
+- misaligned load는 register write control 자체를 막지 않고, Data Memory가 `0`을 반환하게 둡니다. 따라서 상위 CPU에서는 해당 load의 write-back 값이 `0`입니다.
+- `MisalignedAccess`는 RTL/debug/testbench 관찰용 신호이며, PC redirect, flush, trap, exception을 만들지 않습니다.
+- 정상 프로그램과 CRT generator는 `lh/lhu/sh`를 2-byte aligned, `lw/sw`를 4-byte aligned로 생성하는 것을 기본 가정으로 둡니다.
 
 ##### `JumpSel`
 
@@ -573,7 +597,7 @@ else:
 RegWEn=0, DestSel=DEST_NONE(11), WBSel=WB_NONE(11),
 ASel=A_ZERO(10), BSel=B_ZERO(101), ImmSel=IMM_NONE(111),
 BrSel=BR_NONE(000), ALUSel=ALU_NONE(1111),
-WdLen=MEM_NONE(11), MemRW=MEM_IDLE(100), LoadEx=0,
+WdLen=MEM_NONE(11), MemRW=MEM_IDLE(00), LoadEx=0,
 Branch=0, Jump=0, JumpSel=0, PCSel=PC_PLUS4(00)
 ```
 
@@ -585,62 +609,62 @@ Branch=0, Jump=0, JumpSel=0, PCSel=PC_PLUS4(00)
 
 | 명령어 | RegWEn | DestSel | ASel | BSel | ImmSel | BrSel | ALUSel | WBSel | WdLen | MemRW | LoadEx | Branch | Jump | JumpSel | PCSel |
 | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |
-| add, addu | 1 | DEST_RD(01) | A_RS(00) | B_RT(000) | IMM_NONE(111) | BR_NONE(000) | ALU_ADD(0000) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
-| sub, subu | 1 | DEST_RD(01) | A_RS(00) | B_RT(000) | IMM_NONE(111) | BR_NONE(000) | ALU_SUB(0001) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
-| and | 1 | DEST_RD(01) | A_RS(00) | B_RT(000) | IMM_NONE(111) | BR_NONE(000) | ALU_AND(0010) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
-| or | 1 | DEST_RD(01) | A_RS(00) | B_RT(000) | IMM_NONE(111) | BR_NONE(000) | ALU_OR(0011) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
-| xor | 1 | DEST_RD(01) | A_RS(00) | B_RT(000) | IMM_NONE(111) | BR_NONE(000) | ALU_XOR(0100) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
-| nor | 1 | DEST_RD(01) | A_RS(00) | B_RT(000) | IMM_NONE(111) | BR_NONE(000) | ALU_NOR(1010) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
-| slt | 1 | DEST_RD(01) | A_RS(00) | B_RT(000) | IMM_NONE(111) | BR_NONE(000) | ALU_SLT(0101) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
-| sltu | 1 | DEST_RD(01) | A_RS(00) | B_RT(000) | IMM_NONE(111) | BR_NONE(000) | ALU_SLTU(0110) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
+| add, addu | 1 | DEST_RD(01) | A_RS(00) | B_RT(000) | IMM_NONE(111) | BR_NONE(000) | ALU_ADD(0000) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
+| sub, subu | 1 | DEST_RD(01) | A_RS(00) | B_RT(000) | IMM_NONE(111) | BR_NONE(000) | ALU_SUB(0001) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
+| and | 1 | DEST_RD(01) | A_RS(00) | B_RT(000) | IMM_NONE(111) | BR_NONE(000) | ALU_AND(0010) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
+| or | 1 | DEST_RD(01) | A_RS(00) | B_RT(000) | IMM_NONE(111) | BR_NONE(000) | ALU_OR(0011) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
+| xor | 1 | DEST_RD(01) | A_RS(00) | B_RT(000) | IMM_NONE(111) | BR_NONE(000) | ALU_XOR(0100) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
+| nor | 1 | DEST_RD(01) | A_RS(00) | B_RT(000) | IMM_NONE(111) | BR_NONE(000) | ALU_NOR(1010) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
+| slt | 1 | DEST_RD(01) | A_RS(00) | B_RT(000) | IMM_NONE(111) | BR_NONE(000) | ALU_SLT(0101) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
+| sltu | 1 | DEST_RD(01) | A_RS(00) | B_RT(000) | IMM_NONE(111) | BR_NONE(000) | ALU_SLTU(0110) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
 
 ##### 6.2 Shift
 
 | 명령어 | RegWEn | DestSel | ASel | BSel | ImmSel | BrSel | ALUSel | WBSel | WdLen | MemRW | LoadEx | Branch | Jump | JumpSel | PCSel |
 | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |
-| sll | 1 | DEST_RD(01) | A_RT(11) | B_SHAMT(011) | IMM_NONE(111) | BR_NONE(000) | ALU_SLL(0111) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
-| srl | 1 | DEST_RD(01) | A_RT(11) | B_SHAMT(011) | IMM_NONE(111) | BR_NONE(000) | ALU_SRL(1000) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
-| sra | 1 | DEST_RD(01) | A_RT(11) | B_SHAMT(011) | IMM_NONE(111) | BR_NONE(000) | ALU_SRA(1001) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
-| sllv | 1 | DEST_RD(01) | A_RT(11) | B_RS_LOW5(100) | IMM_NONE(111) | BR_NONE(000) | ALU_SLL(0111) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
-| srlv | 1 | DEST_RD(01) | A_RT(11) | B_RS_LOW5(100) | IMM_NONE(111) | BR_NONE(000) | ALU_SRL(1000) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
-| srav | 1 | DEST_RD(01) | A_RT(11) | B_RS_LOW5(100) | IMM_NONE(111) | BR_NONE(000) | ALU_SRA(1001) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
+| sll | 1 | DEST_RD(01) | A_RT(11) | B_SHAMT(011) | IMM_NONE(111) | BR_NONE(000) | ALU_SLL(0111) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
+| srl | 1 | DEST_RD(01) | A_RT(11) | B_SHAMT(011) | IMM_NONE(111) | BR_NONE(000) | ALU_SRL(1000) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
+| sra | 1 | DEST_RD(01) | A_RT(11) | B_SHAMT(011) | IMM_NONE(111) | BR_NONE(000) | ALU_SRA(1001) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
+| sllv | 1 | DEST_RD(01) | A_RT(11) | B_RS_LOW5(100) | IMM_NONE(111) | BR_NONE(000) | ALU_SLL(0111) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
+| srlv | 1 | DEST_RD(01) | A_RT(11) | B_RS_LOW5(100) | IMM_NONE(111) | BR_NONE(000) | ALU_SRL(1000) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
+| srav | 1 | DEST_RD(01) | A_RT(11) | B_RS_LOW5(100) | IMM_NONE(111) | BR_NONE(000) | ALU_SRA(1001) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
 
 ##### 6.3 I-type ALU / Immediate
 
 | 명령어 | RegWEn | DestSel | ASel | BSel | ImmSel | BrSel | ALUSel | WBSel | WdLen | MemRW | LoadEx | Branch | Jump | JumpSel | PCSel |
 | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |
-| addi, addiu | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_ADD(0000) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
-| andi | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_ZERO16(001) | BR_NONE(000) | ALU_AND(0010) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
-| ori | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_ZERO16(001) | BR_NONE(000) | ALU_OR(0011) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
-| xori | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_ZERO16(001) | BR_NONE(000) | ALU_XOR(0100) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
-| slti | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_SLT(0101) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
-| sltiu | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_SLTU(0110) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
-| lui | 1 | DEST_RT(00) | A_ZERO(10) | B_IMM(001) | IMM_LUI16(010) | BR_NONE(000) | ALU_ADD(0000) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 0 | X | PC_PLUS4(00) |
+| addi, addiu | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_ADD(0000) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
+| andi | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_ZERO16(001) | BR_NONE(000) | ALU_AND(0010) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
+| ori | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_ZERO16(001) | BR_NONE(000) | ALU_OR(0011) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
+| xori | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_ZERO16(001) | BR_NONE(000) | ALU_XOR(0100) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
+| slti | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_SLT(0101) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
+| sltiu | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_SLTU(0110) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
+| lui | 1 | DEST_RT(00) | A_ZERO(10) | B_IMM(001) | IMM_LUI16(010) | BR_NONE(000) | ALU_ADD(0000) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
 
 ##### 6.4 Load
 
 | 명령어 | RegWEn | DestSel | ASel | BSel | ImmSel | BrSel | ALUSel | WBSel | WdLen | MemRW | LoadEx | Branch | Jump | JumpSel | PCSel |
 | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |
-| lb | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_ADD(0000) | WB_MEM(00) | MEM_BYTE(00) | MEM_LOAD(011) | 0 | 0 | 0 | X | PC_PLUS4(00) |
-| lbu | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_ADD(0000) | WB_MEM(00) | MEM_BYTE(00) | MEM_LOAD(011) | 1 | 0 | 0 | X | PC_PLUS4(00) |
-| lh | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_ADD(0000) | WB_MEM(00) | MEM_HALF(01) | MEM_LOAD(011) | 0 | 0 | 0 | X | PC_PLUS4(00) |
-| lhu | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_ADD(0000) | WB_MEM(00) | MEM_HALF(01) | MEM_LOAD(011) | 1 | 0 | 0 | X | PC_PLUS4(00) |
-| lw | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_ADD(0000) | WB_MEM(00) | MEM_WORD(10) | MEM_LOAD(011) | X | 0 | 0 | X | PC_PLUS4(00) |
+| lb | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_ADD(0000) | WB_MEM(00) | MEM_BYTE(00) | MEM_LOAD(01) | 0 | 0 | 0 | X | PC_PLUS4(00) |
+| lbu | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_ADD(0000) | WB_MEM(00) | MEM_BYTE(00) | MEM_LOAD(01) | 1 | 0 | 0 | X | PC_PLUS4(00) |
+| lh | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_ADD(0000) | WB_MEM(00) | MEM_HALF(01) | MEM_LOAD(01) | 0 | 0 | 0 | X | PC_PLUS4(00) |
+| lhu | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_ADD(0000) | WB_MEM(00) | MEM_HALF(01) | MEM_LOAD(01) | 1 | 0 | 0 | X | PC_PLUS4(00) |
+| lw | 1 | DEST_RT(00) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_ADD(0000) | WB_MEM(00) | MEM_WORD(10) | MEM_LOAD(01) | X | 0 | 0 | X | PC_PLUS4(00) |
 
 ##### 6.5 Store
 
 | 명령어 | RegWEn | DestSel | ASel | BSel | ImmSel | BrSel | ALUSel | WBSel | WdLen | MemRW | LoadEx | Branch | Jump | JumpSel | PCSel |
 | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |
-| sb | 0 | DEST_NONE(11) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_ADD(0000) | WB_NONE(11) | MEM_BYTE(00) | MEM_SB(000) | X | 0 | 0 | X | PC_PLUS4(00) |
-| sh | 0 | DEST_NONE(11) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_ADD(0000) | WB_NONE(11) | MEM_HALF(01) | MEM_SH(001) | X | 0 | 0 | X | PC_PLUS4(00) |
-| sw | 0 | DEST_NONE(11) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_ADD(0000) | WB_NONE(11) | MEM_WORD(10) | MEM_SW(010) | X | 0 | 0 | X | PC_PLUS4(00) |
+| sb | 0 | DEST_NONE(11) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_ADD(0000) | WB_NONE(11) | MEM_BYTE(00) | MEM_STORE(10) | X | 0 | 0 | X | PC_PLUS4(00) |
+| sh | 0 | DEST_NONE(11) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_ADD(0000) | WB_NONE(11) | MEM_HALF(01) | MEM_STORE(10) | X | 0 | 0 | X | PC_PLUS4(00) |
+| sw | 0 | DEST_NONE(11) | A_RS(00) | B_IMM(001) | IMM_SIGN16(000) | BR_NONE(000) | ALU_ADD(0000) | WB_NONE(11) | MEM_WORD(10) | MEM_STORE(10) | X | 0 | 0 | X | PC_PLUS4(00) |
 
 ##### 6.6 Branch
 
 | 명령어 | RegWEn | DestSel | ASel | BSel | ImmSel | BrSel | ALUSel | WBSel | WdLen | MemRW | LoadEx | Branch | Jump | JumpSel | PCSel |
 | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |
-| beq | 0 | DEST_NONE(11) | A_PC4(01) | B_BR_OFFSET(010) | IMM_BRANCH16(011) | BR_EQ(001) | ALU_ADD(0000) | WB_NONE(11) | MEM_NONE(11) | MEM_IDLE(100) | X | 1 | 0 | X | BrTaken ? PC_BRANCH(01) : PC_PLUS4(00) |
-| bne | 0 | DEST_NONE(11) | A_PC4(01) | B_BR_OFFSET(010) | IMM_BRANCH16(011) | BR_NE(010) | ALU_ADD(0000) | WB_NONE(11) | MEM_NONE(11) | MEM_IDLE(100) | X | 1 | 0 | X | BrTaken ? PC_BRANCH(01) : PC_PLUS4(00) |
+| beq | 0 | DEST_NONE(11) | A_PC4(01) | B_BR_OFFSET(010) | IMM_BRANCH16(011) | BR_EQ(001) | ALU_ADD(0000) | WB_NONE(11) | MEM_NONE(11) | MEM_IDLE(00) | X | 1 | 0 | X | BrTaken ? PC_BRANCH(01) : PC_PLUS4(00) |
+| bne | 0 | DEST_NONE(11) | A_PC4(01) | B_BR_OFFSET(010) | IMM_BRANCH16(011) | BR_NE(010) | ALU_ADD(0000) | WB_NONE(11) | MEM_NONE(11) | MEM_IDLE(00) | X | 1 | 0 | X | BrTaken ? PC_BRANCH(01) : PC_PLUS4(00) |
 
 Branch 명령어에서 ALU는 branch target만 계산합니다.
 
@@ -654,10 +678,10 @@ Branch compare는 ALU result/zero flag와 분리된 별도 `BranchComp`가 수�
 
 | 명령어 | RegWEn | DestSel | ASel | BSel | ImmSel | BrSel | ALUSel | WBSel | WdLen | MemRW | LoadEx | Branch | Jump | JumpSel | PCSel |
 | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |
-| j | 0 | DEST_NONE(11) | A_ZERO(10) | B_NONE(111) | IMM_J26(100) | BR_NONE(000) | ALU_NONE(1111) | WB_NONE(11) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 1 | JUMP_IMM26(0) | PC_JUMP(10) |
-| jal | 1 | DEST_RA(10) | A_ZERO(10) | B_NONE(111) | IMM_J26(100) | BR_NONE(000) | ALU_NONE(1111) | WB_PC4(10) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 1 | JUMP_IMM26(0) | PC_JUMP(10) |
-| jr | 0 | DEST_NONE(11) | A_RS(00) | B_NONE(111) | IMM_NONE(111) | BR_NONE(000) | ALU_NONE(1111) | WB_NONE(11) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 1 | JUMP_REG(1) | PC_JUMP(10) |
-| jalr | 1 | DEST_RD(01) | A_RS(00) | B_NONE(111) | IMM_NONE(111) | BR_NONE(000) | ALU_NONE(1111) | WB_PC4(10) | MEM_NONE(11) | MEM_IDLE(100) | X | 0 | 1 | JUMP_REG(1) | PC_JUMP(10) |
+| j | 0 | DEST_NONE(11) | A_ZERO(10) | B_NONE(111) | IMM_J26(100) | BR_NONE(000) | ALU_NONE(1111) | WB_NONE(11) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 1 | JUMP_IMM26(0) | PC_JUMP(10) |
+| jal | 1 | DEST_RA(10) | A_ZERO(10) | B_NONE(111) | IMM_J26(100) | BR_NONE(000) | ALU_NONE(1111) | WB_PC4(10) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 1 | JUMP_IMM26(0) | PC_JUMP(10) |
+| jr | 0 | DEST_NONE(11) | A_RS(00) | B_NONE(111) | IMM_NONE(111) | BR_NONE(000) | ALU_NONE(1111) | WB_NONE(11) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 1 | JUMP_REG(1) | PC_JUMP(10) |
+| jalr | 1 | DEST_RD(01) | A_RS(00) | B_NONE(111) | IMM_NONE(111) | BR_NONE(000) | ALU_NONE(1111) | WB_PC4(10) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 1 | JUMP_REG(1) | PC_JUMP(10) |
 
 `PC_JUMP(10)`는 `JumpSelector`의 출력인 `SelectedJumpTarget`을 PC로 보냅니다. 따라서 `jr/jalr`도 `PCSel=PC_JUMP(10)`이며, 별도의 `PC_REG` 값은 필요 없습니다.
 
@@ -691,7 +715,7 @@ Branch compare는 ALU result/zero flag와 분리된 별도 `BranchComp`가 수�
 | 신호 | 폭 | 설명 |
 | --- | ---: | --- |
 | `WdLen` | 2 | load/store 접근 폭입니다. |
-| `MemRW` | 3 | 메모리 동작 종류입니다. idle, load, byte/half/word store를 구분합니다. |
+| `MemRW` | 2 | 메모리 동작 종류입니다. idle, load, store direction을 구분합니다. byte/half/word 폭은 `WdLen`이 담당합니다. |
 | LoadEx | 1 | 부분 워드 load 결과 확장 방식입니다. 0은 sign-extend, 1은 zero-extend입니다. |
 
 ##### 해저드 검출 보조 제어
@@ -809,18 +833,19 @@ Classic MIPS instruction으로는 `beq`, `bne`만 직접 구현합니다. `blt/b
 | 10 | MEM_WORD | word access |
 | 11 | MEM_NONE | memory access 없음 |
 
-##### `MemRW[2:0]`
+##### `MemRW[1:0]`
 
 | 값 | 이름 | 의미 |
 | --- | --- | --- |
-| 000 | MEM_SB | byte store |
-| 001 | MEM_SH | halfword store |
-| 010 | MEM_SW | word store |
-| 011 | MEM_LOAD | load |
-| 100 | MEM_IDLE | memory access 없음 |
-| `101` | 예약 | 예약입니다. |
-| `110` | 예약 | 예약입니다. |
-| `111` | 예약 | 예약입니다. |
+| 00 | MEM_IDLE | memory access 없음 |
+| 01 | MEM_LOAD | load |
+| 10 | MEM_STORE | store |
+| 11 | 예약 | 예약입니다. |
+
+
+##### Pipeline Data Memory alignment policy
+
+파이프라인 RTL도 single-cycle과 같은 misaligned idle 정책을 사용합니다. MEM stage에서 `WdLen`, `MemRW`, ALU address를 기준으로 `MisalignedAccess`를 만들고, sync-read Data Memory에서는 이 상태를 read data와 같은 타이밍으로 내부 지연시켜 `Data_RD=0` 또는 write disable을 적용합니다. 이 신호는 debug/testbench용이며 hazard/flush/exception 제어에는 사용하지 않습니다.
 
 ##### `LoadEx`
 
@@ -942,9 +967,9 @@ RsUsed=0, RtUsed=0
 
 | 명령어 | RegWEn | DestSel | ASel | BSel | ImmSel | BrSel | ALUSel | WBSel | WdLen | MemRW | LoadEx | JumpSel | Branch | Jump | RsUsed | RtUsed |
 | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: |
-| sb | 0 | DEST_NONE | A_RS | B_IMM | IMM_SIGN16 | BR_NONE | ALU_ADD | WB_NONE | MEM_BYTE | MEM_SB | X | JUMP_NONE | 0 | 0 | 1 | 1 |
-| sh | 0 | DEST_NONE | A_RS | B_IMM | IMM_SIGN16 | BR_NONE | ALU_ADD | WB_NONE | MEM_HALF | MEM_SH | X | JUMP_NONE | 0 | 0 | 1 | 1 |
-| sw | 0 | DEST_NONE | A_RS | B_IMM | IMM_SIGN16 | BR_NONE | ALU_ADD | WB_NONE | MEM_WORD | MEM_SW | X | JUMP_NONE | 0 | 0 | 1 | 1 |
+| sb | 0 | DEST_NONE | A_RS | B_IMM | IMM_SIGN16 | BR_NONE | ALU_ADD | WB_NONE | MEM_BYTE | MEM_STORE | X | JUMP_NONE | 0 | 0 | 1 | 1 |
+| sh | 0 | DEST_NONE | A_RS | B_IMM | IMM_SIGN16 | BR_NONE | ALU_ADD | WB_NONE | MEM_HALF | MEM_STORE | X | JUMP_NONE | 0 | 0 | 1 | 1 |
+| sw | 0 | DEST_NONE | A_RS | B_IMM | IMM_SIGN16 | BR_NONE | ALU_ADD | WB_NONE | MEM_WORD | MEM_STORE | X | JUMP_NONE | 0 | 0 | 1 | 1 |
 
 `rt`는 store data source이므로 `RtUsed=1`입니다. store data는 `FwdRtData`를 MEM 단계까지 전달하는 구조가 좋습니다.
 

@@ -128,7 +128,7 @@ module mips_single_cycle_top #(
     wire [3:0] ALUSel;
     wire [1:0] WBSel;
     wire [1:0] WdLen;
-    wire [2:0] MemRW;
+    wire [1:0] MemRW;
     wire       LoadEx;
     wire       Branch;
     wire       Jump;
@@ -233,6 +233,7 @@ module mips_single_cycle_top #(
     );
 
     // Data memory.
+    wire DataMemoryMisalignedAccess;
     data_memory #(
         .MEM_AW(DMEM_AW)
     ) u_dmem (
@@ -242,7 +243,8 @@ module mips_single_cycle_top #(
         .WdLen(WdLen),
         .MemRW(MemRW),
         .LoadEx(LoadEx),
-        .Data_RD(Data_RD)
+        .Data_RD(Data_RD),
+        .MisalignedAccess(DataMemoryMisalignedAccess)
     );
 
     // Branch/jump/next-PC path.
@@ -259,14 +261,14 @@ module mips_single_cycle_top #(
     );
 
     jump_target_generator u_jump_target (
-        .Jump(Jump),
-        .JumpSel(JumpSel),
         .PCPlus4(PCPlus4),
         .target26(target26),
-        .Data_rs(Data_rs),
-        .JumpImmTarget(JumpImmTarget),
-        .SelectedJumpTarget(SelectedJumpTarget)
+        .JumpImmTarget(JumpImmTarget)
     );
+
+    // Jump Sel mux: 0 selects J-type immediate target, 1 selects rs target.
+    // Jump itself remains the PC redirect enable and is consumed by pc_control.
+    assign SelectedJumpTarget = JumpSel ? Data_rs : JumpImmTarget;
 
     pc_control u_pc_control (
         .Branch(Branch),
