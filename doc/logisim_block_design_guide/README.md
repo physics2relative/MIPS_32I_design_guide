@@ -116,3 +116,5 @@ block diagram은 배선 흐름을 보여 주는 그림이고, 최종 의미는 `
 ## 11. 파이프라인 확장 메모
 
 이 guide는 단일 사이클 block diagram을 기준으로 합니다. 파이프라인 구현으로 확장할 때는 `ID/EX`, `EX/MEM`, `MEM/WB` register를 추가하고, `RsUsed/RtUsed`, forwarding, stall, flush를 별도 hazard block으로 분리합니다. 단일 사이클의 `PCSel`과 파이프라인 EX-stage redirect는 같은 산출물로 취급하지 않습니다.
+
+- `blocks/13_custom_abs_instruction.md`: 과제 custom `abs rd, rs` instruction RTL/Logisim 설계 변경 가이드입니다.

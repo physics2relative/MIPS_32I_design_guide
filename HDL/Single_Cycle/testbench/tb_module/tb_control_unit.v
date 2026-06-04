@@ -84,6 +84,7 @@ module tb_control_unit;
                         6'b100111: decode_instr = "NOR             ";
                         6'b101010: decode_instr = "SLT             ";
                         6'b101011: decode_instr = "SLTU            ";
+                        6'b101100: decode_instr = "ABS             ";
                         6'b000000: decode_instr = "SLL             ";
                         6'b000010: decode_instr = "SRL             ";
                         6'b000011: decode_instr = "SRA             ";
@@ -128,7 +129,7 @@ module tb_control_unit;
             vector_file = "../../../../../test_vectors/generated/control_unit/vectors.mem";
         end
         if (!$value$plusargs("NUM_VECTORS=%d", num_vectors)) begin
-            num_vectors = 39;
+            num_vectors = 40;
         end
 
         $display("=======================================================");

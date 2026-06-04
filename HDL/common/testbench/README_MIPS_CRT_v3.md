@@ -61,7 +61,7 @@ SEED=7 N_INST=200 M_ITER=50 PHASE_START=1 PHASE_END=3 ./run.sh
 `tb_MIPS_CRT_v3.v`는 두 층으로 program을 만듭니다.
 
 1. **Directed prelude**: 구현 대상 ISA class를 최소 1회 이상 명시적으로 포함합니다.
-   - R-type ALU/shift: `add/addu/sub/subu/and/or/xor/nor/slt/sltu/sll/srl/sra/sllv/srlv/srav`
+   - R-type ALU/shift: `add/addu/sub/subu/and/or/xor/nor/slt/sltu/abs(custom)/sll/srl/sra/sllv/srlv/srav`
    - I-type: `addi/addiu/andi/ori/xori/slti/sltiu/lui`
    - Memory: `lb/lbu/lh/lhu/lw/sb/sh/sw`
    - Control flow: `beq/bne/j/jal/jr/jalr`

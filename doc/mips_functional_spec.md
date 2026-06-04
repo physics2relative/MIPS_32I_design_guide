@@ -168,6 +168,9 @@ JumpTarget = { PC+4[31:28], target[25:0], 2'b00 }
 
 ### 3. R-type ALU 명령어
 
+> `abs rd, rs`는 표준 MIPS integer ISA 명령이 아니라 과제 요구사항을 위한 프로젝트 custom instruction입니다. 표준 호환 설명에서는 별도 확장으로 표시해야 합니다. `abs(0x8000_0000)`은 exception 없이 `0x8000_0000`으로 wrap-around됩니다.
+
+
 | 명령어 | RV32I 대응 | 기계어 형식 | 동작 | 어셈블리 예시 |
 | --- | --- | --- | --- | --- |
 | add rd, rs, rt | ADD | op=000000 rs rt rd shamt=00000 funct=100000 | R[rd] <- R[rs] + R[rt] | add $t0, $t1, $t2 |
@@ -180,6 +183,7 @@ JumpTarget = { PC+4[31:28], target[25:0], 2'b00 }
 | nor rd, rs, rt | MIPS 추가 | op=000000 rs rt rd shamt=00000 funct=100111 | R[rd] <- ~(R[rs] &#124; R[rt]) | nor $t0, $t1, $t2 |
 | slt rd, rs, rt | SLT | op=000000 rs rt rd shamt=00000 funct=101010 | R[rd] <- signed(R[rs]) < signed(R[rt]) ? 1 : 0 | slt $t0, $t1, $t2 |
 | sltu rd, rs, rt | SLTU | op=000000 rs rt rd shamt=00000 funct=101011 | R[rd] <- unsigned(R[rs]) < unsigned(R[rt]) ? 1 : 0 | sltu $t0, $t1, $t2 |
+| abs rd, rs | 프로젝트 custom ABS | op=000000 rs rt=00000 rd shamt=00000 funct=101100 | R[rd] <- R[rs][31] ? -R[rs] : R[rs], overflow/trap 없이 wrap-around | abs $t0, $t1 |
 
 구현 팁:
 
@@ -507,6 +511,7 @@ JumpSel
 | 1000 | ALU_SRL | A >> B[4:0], zero-fill |
 | 1001 | ALU_SRA | signed A >>> B[4:0], sign-fill |
 | 1010 | ALU_NOR | ~(A &#124; B) |
+| 1011 | ALU_ABS | custom integer ABS: A[31] ? -A : A, wrap-around |
 | 1111 | ALU_NONE | ALU result를 사용하지 않습니다. |
 
 ##### `WdLen[1:0]`, `MemRW[1:0]`
@@ -621,6 +626,7 @@ Branch=0, Jump=0, JumpSel=0, PCSel=PC_PLUS4(00)
 | nor | 1 | DEST_RD(01) | A_RS(00) | B_RT(000) | X/IMM_SIGN16(00) | X/BR_EQ(0) | ALU_NOR(1010) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
 | slt | 1 | DEST_RD(01) | A_RS(00) | B_RT(000) | X/IMM_SIGN16(00) | X/BR_EQ(0) | ALU_SLT(0101) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
 | sltu | 1 | DEST_RD(01) | A_RS(00) | B_RT(000) | X/IMM_SIGN16(00) | X/BR_EQ(0) | ALU_SLTU(0110) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
+| abs | 1 | DEST_RD(01) | A_RS(00) | B_ZERO(100) | X/IMM_SIGN16(00) | X/BR_EQ(0) | ALU_ABS(1011) | WB_ALU(01) | MEM_NONE(11) | MEM_IDLE(00) | X | 0 | 0 | X | PC_PLUS4(00) |
 
 ##### 6.2 Shift
 
@@ -819,7 +825,7 @@ Classic MIPS instruction으로는 `beq`, `bne`만 직접 구현합니다. `blt/b
 | 1000 | ALU_SRL | A >> B[4:0], zero-fill |
 | 1001 | ALU_SRA | signed A >>> B[4:0], sign-fill |
 | 1010 | ALU_NOR | ~(A &#124; B) |
-| 1011 | ALU_PASS_B | B를 그대로 출력합니다. 선택 사항입니다. |
+| 1011 | ALU_ABS | custom integer ABS: A[31] ? -A : A, wrap-around |
 | `1100` | 예약 | 예약입니다. |
 | `1101` | 예약 | 예약입니다. |
 | 1110 | ALU_INVALID | invalid decode 표시용입니다. |
@@ -935,6 +941,7 @@ RsUsed=0, RtUsed=0
 | nor | 1 | DEST_RD | A_RS | B_RT | X/IMM_SIGN16 | X/BR_EQ | ALU_NOR | WB_ALU | MEM_NONE | MEM_IDLE | X | 0 | 0 | 0 | 1 | 1 |
 | slt | 1 | DEST_RD | A_RS | B_RT | X/IMM_SIGN16 | X/BR_EQ | ALU_SLT | WB_ALU | MEM_NONE | MEM_IDLE | X | 0 | 0 | 0 | 1 | 1 |
 | sltu | 1 | DEST_RD | A_RS | B_RT | X/IMM_SIGN16 | X/BR_EQ | ALU_SLTU | WB_ALU | MEM_NONE | MEM_IDLE | X | 0 | 0 | 0 | 1 | 1 |
+| abs | 1 | DEST_RD | A_RS | B_ZERO | X/IMM_SIGN16 | X/BR_EQ | ALU_ABS | WB_ALU | MEM_NONE | MEM_IDLE | X | 0 | 0 | 0 | 1 | 0 |
 
 ##### 7.2 Shift
 

@@ -25,6 +25,7 @@ module ALU (
     localparam SRL  = 4'd8;
     localparam SRA  = 4'd9;
     localparam NOR  = 4'd10;
+    localparam ABS  = 4'd11;
     localparam NONE = 4'd15;
 
     // Adder path.  This intentionally uses only ALUSel[0], matching the
@@ -59,6 +60,12 @@ module ALU (
     assign xor_result = ALU_a ^ ALU_b;
     assign nor_result = ~or_result;
 
+    // Custom integer ABS extension.  This keeps two-complement wrap-around,
+    // so abs(0x8000_0000) remains 0x8000_0000 because the project has no
+    // overflow/exception path.
+    wire [31:0] abs_result;
+    assign abs_result = ALU_a[31] ? (~ALU_a + 32'd1) : ALU_a;
+
     // Comparator path.  Only one unsigned comparator is instantiated.  Signed
     // less-than is reconstructed with the sign-bit xor mux:
     //   if signs differ, signed_lt = A[31]
@@ -92,6 +99,7 @@ module ALU (
             SRL  : ALU_Result = ALU_a >> shamt;
             SRA  : ALU_Result = $signed(ALU_a) >>> shamt;
             NOR  : ALU_Result = nor_result;
+            ABS  : ALU_Result = abs_result;
             NONE : ALU_Result = 32'h0000_0000;
             default: ALU_Result = 32'h0000_0000;
         endcase

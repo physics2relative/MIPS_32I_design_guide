@@ -44,6 +44,7 @@ module tb_ALU;
                 4'h8: decode_op = "SRL             ";
                 4'h9: decode_op = "SRA             ";
                 4'hA: decode_op = "NOR             ";
+                4'hB: decode_op = "ABS             ";
                 4'hF: decode_op = "NONE            ";
                 default: decode_op = "UNKNOWN         ";
             endcase
@@ -58,7 +59,7 @@ module tb_ALU;
             vector_file = "../../../../../test_vectors/generated/alu/vectors.mem";
         end
         if (!$value$plusargs("NUM_VECTORS=%d", num_vectors)) begin
-            num_vectors = 22;
+            num_vectors = 29;
         end
 
         $display("=======================================================");

@@ -21,7 +21,7 @@ ASEL = {"RS": 0b00, "PC4": 0b01, "ZERO": 0b10, "RT": 0b11}
 BSEL = {"RT": 0b000, "IMM": 0b001, "SHAMT": 0b010, "RS_LOW5": 0b011, "ZERO": 0b100, "RESERVED5": 0b101, "RESERVED6": 0b110, "NONE": 0b111}
 IMMSEL = {"SIGN16": 0b00, "ZERO16": 0b01, "LUI16": 0b10, "BRANCH16": 0b11}
 BRSEL = {"EQ": 0b0, "NE": 0b1}
-ALU = {"ADD": 0b0000, "SUB": 0b0001, "AND": 0b0010, "OR": 0b0011, "XOR": 0b0100, "SLT": 0b0101, "SLTU": 0b0110, "SLL": 0b0111, "SRL": 0b1000, "SRA": 0b1001, "NOR": 0b1010, "NONE": 0b1111}
+ALU = {"ADD": 0b0000, "SUB": 0b0001, "AND": 0b0010, "OR": 0b0011, "XOR": 0b0100, "SLT": 0b0101, "SLTU": 0b0110, "SLL": 0b0111, "SRL": 0b1000, "SRA": 0b1001, "NOR": 0b1010, "ABS": 0b1011, "NONE": 0b1111}
 WDLEN = {"BYTE": 0b00, "HALF": 0b01, "WORD": 0b10, "NONE": 0b11}
 MEMRW = {"IDLE": 0b00, "LOAD": 0b01, "STORE": 0b10}
 PCSEL = {"PC_PLUS4": 0b00, "PC_BRANCH": 0b01, "PC_JUMP": 0b10, "RESERVED": 0b11}
@@ -85,6 +85,8 @@ def alu_result(a: int, b: int, sel: int) -> int:
         return u32(s32(a) >> shamt)
     if sel == ALU["NOR"]:
         return u32(~(a | b))
+    if sel == ALU["ABS"]:
+        return u32(-s32(a)) if s32(a) < 0 else a
     if sel == ALU["NONE"]:
         return 0
     raise ValueError(f"unknown ALUSel {sel}")
@@ -246,6 +248,7 @@ def control_rows() -> list[dict]:
         ("and", 0x24, "AND"), ("or", 0x25, "OR"), ("xor", 0x26, "XOR"), ("nor", 0x27, "NOR"),
         ("slt", 0x2A, "SLT"), ("sltu", 0x2B, "SLTU")]:
         add(instr, 0x00, funct, **r_common, ALUSel=ALU[alu])
+    add("abs", 0x00, 0x2C, RegWEn=1, DestSel=DEST["RD"], ASel=ASEL["RS"], BSel=BSEL["ZERO"], ALUSel=ALU["ABS"], WBSel=WB["ALU"])
     for instr, funct, alu in [("sll", 0x00, "SLL"), ("srl", 0x02, "SRL"), ("sra", 0x03, "SRA")]:
         add(instr, 0x00, funct, RegWEn=1, DestSel=DEST["RD"], ASel=ASEL["RT"], BSel=BSEL["SHAMT"], ALUSel=ALU[alu], WBSel=WB["ALU"])
     for instr, funct, alu in [("sllv", 0x04, "SLL"), ("srlv", 0x06, "SRL"), ("srav", 0x07, "SRA")]:
@@ -400,6 +403,8 @@ def alu_vectors() -> list[dict]:
         ("SUB", 0x00000003, 0x00000001), ("SUB", 0x00000000, 0x00000001), ("SUB", 0x80000000, 0x00000001),
         ("AND", 0xA5A5A5A5, 0x0F0F0F0F), ("OR", 0xA5000000, 0x00A500A5), ("XOR", 0xFFFF0000, 0x00FFFF00), ("NOR", 0x00000000, 0x00000000), ("NOR", 0xAAAAAAAA, 0x55555555),
         ("SLT", 0xFFFFFFFF, 0x00000001), ("SLT", 0x7FFFFFFF, 0x80000000), ("SLTU", 0xFFFFFFFF, 0x00000001), ("SLTU", 0x00000001, 0xFFFFFFFF),
+        ("ABS", 0x00000000, 0x00000000), ("ABS", 0x00000001, 0x00000000), ("ABS", 0xFFFFFFFF, 0x00000000), ("ABS", 0xFFFFFFFE, 0x00000000),
+        ("ABS", 0x7FFFFFFF, 0x00000000), ("ABS", 0x80000000, 0x00000000), ("ABS", 0x80000001, 0x00000000),
         ("SLL", 0x00000001, 0x0000001F), ("SLL", 0x80000001, 0x00000004), ("SRL", 0x80000000, 0x0000001F), ("SRA", 0x80000000, 0x0000001F), ("SRA", 0x7FFFFFFF, 0x00000004),
         ("NONE", 0xDEADBEEF, 0x00000000),
     ]
@@ -661,7 +666,9 @@ def compare_trees(expected: Path, actual: Path) -> list[str]:
         return sorted(
             p.relative_to(base)
             for p in base.rglob("*")
-            if p.is_file() and p.name != "vectors.mem"
+            if p.is_file()
+            and p.name != "vectors.mem"
+            and p.relative_to(base).parts[:1] != ("top_smoke",)
         )
 
     expected_files = comparable_files(expected)

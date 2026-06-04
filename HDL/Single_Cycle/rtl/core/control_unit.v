@@ -69,6 +69,8 @@ module control_unit (
     localparam [5:0] FN_NOR   = 6'b100111;
     localparam [5:0] FN_SLT   = 6'b101010;
     localparam [5:0] FN_SLTU  = 6'b101011;
+    // Project custom integer ABS: abs rd, rs. Not a standard MIPS integer instruction.
+    localparam [5:0] FN_ABS   = 6'b101100;
 
     // DestSel
     localparam [1:0] DEST_RT   = 2'b00;
@@ -114,6 +116,7 @@ module control_unit (
     localparam [3:0] ALU_SRL  = 4'b1000;
     localparam [3:0] ALU_SRA  = 4'b1001;
     localparam [3:0] ALU_NOR  = 4'b1010;
+    localparam [3:0] ALU_ABS  = 4'b1011;
     localparam [3:0] ALU_NONE = 4'b1111;
 
     // Memory
@@ -162,6 +165,15 @@ module control_unit (
             Branch  = 1'b0;
             Jump    = 1'b0;
             JumpSel = 1'b0;
+        end
+    endtask
+
+
+    task set_rtype_unary_rs;
+        input [3:0] alu_sel;
+        begin
+            set_rtype_alu(alu_sel);
+            BSel = B_ZERO;
         end
     endtask
 
@@ -250,6 +262,7 @@ module control_unit (
                     FN_NOR:          set_rtype_alu(ALU_NOR);
                     FN_SLT:          set_rtype_alu(ALU_SLT);
                     FN_SLTU:         set_rtype_alu(ALU_SLTU);
+                    FN_ABS:          set_rtype_unary_rs(ALU_ABS);
                     FN_SLL:          set_shift(B_SHAMT,   ALU_SLL);
                     FN_SRL:          set_shift(B_SHAMT,   ALU_SRL);
                     FN_SRA:          set_shift(B_SHAMT,   ALU_SRA);

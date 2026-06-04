@@ -76,6 +76,7 @@ module MIPS_Golden #(
     localparam [5:0] FN_NOR   = 6'b100111;
     localparam [5:0] FN_SLT   = 6'b101010;
     localparam [5:0] FN_SLTU  = 6'b101011;
+    localparam [5:0] FN_ABS   = 6'b101100;
 
     // ---------------------------------------------------------
     // Architectural state visible to the CRT/waveform
@@ -162,6 +163,7 @@ module MIPS_Golden #(
                         FN_NOR:  decode_name = "NOR         ";
                         FN_SLT:  decode_name = "SLT         ";
                         FN_SLTU: decode_name = "SLTU        ";
+                        FN_ABS:  decode_name = "ABS         ";
                     endcase
                 end
                 OP_J:     decode_name = "J           ";
@@ -293,6 +295,7 @@ module MIPS_Golden #(
                             FN_NOR: begin t_we = 1'b1; t_waddr = t_rd; t_result = ~(t_rs_val | t_rt_val); end
                             FN_SLT: begin t_we = 1'b1; t_waddr = t_rd; t_result = (t_rs_s < t_rt_s) ? 32'd1 : 32'd0; end
                             FN_SLTU: begin t_we = 1'b1; t_waddr = t_rd; t_result = (t_rs_val < t_rt_val) ? 32'd1 : 32'd0; end
+                            FN_ABS: begin t_we = 1'b1; t_waddr = t_rd; t_result = t_rs_val[31] ? (~t_rs_val + 32'd1) : t_rs_val; end
                             default: begin
                                 // Unsupported R-type encodings are side-effect-free NOPs.
                             end

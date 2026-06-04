@@ -221,6 +221,7 @@ module tb_MIPS_CRT_v3 #(
     localparam [5:0] FN_NOR   = 6'b100111;
     localparam [5:0] FN_SLT   = 6'b101010;
     localparam [5:0] FN_SLTU  = 6'b101011;
+    localparam [5:0] FN_ABS   = 6'b101100;
 
     // ---------------------------------------------------------
     // Instruction encoding helpers
@@ -283,6 +284,7 @@ module tb_MIPS_CRT_v3 #(
                         FN_NOR:  iname = "NOR         ";
                         FN_SLT:  iname = "SLT         ";
                         FN_SLTU: iname = "SLTU        ";
+                        FN_ABS:  iname = "ABS         ";
                     endcase
                 end
                 OP_J:     iname = "J           ";
@@ -622,7 +624,7 @@ module tb_MIPS_CRT_v3 #(
                     rs = pick_reg(0);
                     rt = pick_reg(0);
                     rd = pick_reg_except2(rs, rt);
-                    op_pick = rand_mod(10);
+                    op_pick = rand_mod(11);
                     case (op_pick)
                         0: funct = FN_ADD;
                         1: funct = FN_ADDU;
@@ -633,7 +635,8 @@ module tb_MIPS_CRT_v3 #(
                         6: funct = FN_XOR;
                         7: funct = FN_NOR;
                         8: funct = FN_SLT;
-                        default: funct = FN_SLTU;
+                        9: funct = FN_SLTU;
+                        default: begin funct = FN_ABS; rt = 5'd0; end
                     endcase
                     emit_inst(enc_r(rs, rt, rd, 5'd0, funct));
                 end

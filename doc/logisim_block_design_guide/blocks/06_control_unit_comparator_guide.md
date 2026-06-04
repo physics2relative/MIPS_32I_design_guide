@@ -88,6 +88,7 @@ Comparator 출력에는 반드시 tunnel/label을 붙입니다. 예: `op_lw`, `f
 | `6'h27` | `fn_nor_raw` | `is_nor  = op_rtype AND fn_nor_raw` | `nor` |
 | `6'h2A` | `fn_slt_raw` | `is_slt  = op_rtype AND fn_slt_raw` | `slt` |
 | `6'h2B` | `fn_sltu_raw` | `is_sltu = op_rtype AND fn_sltu_raw` | `sltu` |
+| `6'h2C` | `fn_abs_raw` | `is_abs = op_rtype AND fn_abs_raw` | custom `abs` |
 
 ### Funct comparator 주의점
 
@@ -113,6 +114,7 @@ is_xor  = op_rtype AND fn_xor_raw
 is_nor  = op_rtype AND fn_nor_raw
 is_slt  = op_rtype AND fn_slt_raw
 is_sltu = op_rtype AND fn_sltu_raw
+is_abs  = op_rtype AND fn_abs_raw
 
 is_sll  = op_rtype AND fn_sll_raw
 is_srl  = op_rtype AND fn_srl_raw
@@ -157,7 +159,7 @@ Control output을 직접 38개 instruction에서 OR하면 회로가 지저분합
 ```text
 g_r_alu = is_add OR is_addu OR is_sub OR is_subu
        OR is_and OR is_or OR is_xor OR is_nor
-       OR is_slt OR is_sltu
+       OR is_slt OR is_sltu OR is_abs
 
 g_shift_imm = is_sll OR is_srl OR is_sra
 g_shift_var = is_sllv OR is_srlv OR is_srav
@@ -363,6 +365,7 @@ Encoding:
 1000 = ALU_SRL
 1001 = ALU_SRA
 1010 = ALU_NOR
+1011 = ALU_ABS    // project custom abs rd, rs
 1111 = ALU_NONE
 ```
 
@@ -380,16 +383,17 @@ alu_sll  = is_sll OR is_sllv
 alu_srl  = is_srl OR is_srlv
 alu_sra  = is_sra OR is_srav
 alu_nor  = is_nor
+alu_abs  = is_abs
 alu_none = g_jump OR unknown_instr
 ```
 
 Bit 연결:
 
 ```text
-ALUSel[3] = alu_srl OR alu_sra OR alu_nor OR alu_none
+ALUSel[3] = alu_srl OR alu_sra OR alu_nor OR alu_abs OR alu_none
 ALUSel[2] = alu_xor OR alu_slt OR alu_sltu OR alu_sll OR alu_none
-ALUSel[1] = alu_and OR alu_or OR alu_sltu OR alu_sll OR alu_nor OR alu_none
-ALUSel[0] = alu_sub OR alu_or OR alu_slt OR alu_sll OR alu_sra OR alu_none
+ALUSel[1] = alu_and OR alu_or OR alu_sltu OR alu_sll OR alu_nor OR alu_abs OR alu_none
+ALUSel[0] = alu_sub OR alu_or OR alu_slt OR alu_sll OR alu_sra OR alu_abs OR alu_none
 ```
 
 ### 7.7 `WdLen[1:0]`
