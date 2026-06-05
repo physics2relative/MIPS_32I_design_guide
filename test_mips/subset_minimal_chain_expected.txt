@@ -1,0 +1,18 @@
+Expected result for subset_minimal_chain.rom.hex
+
+$1  = 0x00000005
+$2  = 0xFFFFFFFD
+$3  = 0x00000008
+$4  = 0x00000007
+$5  = 0x00000001
+$6  = 0x00000003
+$7  = 0x00001234
+$8  = 0x00001234
+$9  = 0x00000000
+$10 = 0x00000000
+$11 = 0x00000000
+$30 = 0x0000123F
+
+Data memory word at address 0 = 0x00001234
+Program words = 23
+HALT is an infinite self-jump at word index 22.
