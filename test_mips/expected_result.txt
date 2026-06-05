@@ -1,0 +1,4 @@
+Expected final result after executing instruction_chain_abs_all.rom.hex
+Register $30 = 0x246E10BA
+Program words = 81
+HALT is an infinite self-jump at label HALT.
